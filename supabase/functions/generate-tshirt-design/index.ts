@@ -109,7 +109,7 @@ serve(async (req) => {
         : "Do NOT include any text, words, letters, logos, or watermarks in the design.";
 
     // Build the enhanced prompt - NO clothing type mentioned to get raw artwork only
-    const enhancedPrompt = `Create a high-quality, print-ready design artwork:
+    const enhancedPrompt = `Create a high-quality, print-ready design artwork.
 
 DESIGN CONCEPT:
 ${prompt}
@@ -121,15 +121,21 @@ SPECIFICATIONS:
 - Creativity level: ${creativity}%
 - Aspect ratio: ${aspectDesc}
 
+BACKGROUND REQUIREMENT:
+- Generate a fully filled background (solid, gradient, or artistic) matching the design theme.
+- Do NOT leave any transparent areas.
+- The artwork should be complete edge-to-edge within the given aspect ratio.
+
 TEXT REQUIREMENT:
 ${textInstruction}
 
 OUTPUT REQUIREMENTS:
-- Just the artwork/graphic itself, NOT placed on any clothing or mockup
-- High-resolution suitable for print (300 DPI)
-- Centered and balanced composition
-- No watermarks,signatures
-- The design should be isolated and ready to overlay on any surface`;
+- Provide the final artwork as a complete image (no transparency).
+- NOT placed on any clothing or mockup.
+- High-resolution suitable for print (300 DPI).
+- No watermarks or signatures.
+- Centered, balanced, and visually appealing composition.
+- Ensure the background is fully rendered and not a checkerboard transparency pattern.`;
 
     console.log("Enhanced prompt:", enhancedPrompt);
 
