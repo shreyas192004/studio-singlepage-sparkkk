@@ -54,10 +54,10 @@ serve(async (req) => {
   }
 
   if (req.method !== "POST") {
-    return new Response(
-      JSON.stringify({ error: "Method not allowed" }),
-      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   try {
@@ -72,23 +72,14 @@ serve(async (req) => {
         message: e.message,
       }));
       console.error("Validation errors:", errors);
-      return new Response(
-        JSON.stringify({ error: "Invalid request", details: errors }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Invalid request", details: errors }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const {
-      prompt,
-      style,
-      colorScheme,
-      aspectRatio,
-      quality,
-      creativity,
-      clothingType,
-      imagePosition,
-      text,
-    } = validationResult.data;
+    const { prompt, style, colorScheme, aspectRatio, quality, creativity, clothingType, imagePosition, text } =
+      validationResult.data;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -109,11 +100,7 @@ serve(async (req) => {
 
     // Aspect ratio description
     const aspectDesc =
-      aspectRatio === "square"
-        ? "1:1 square"
-        : aspectRatio === "portrait"
-        ? "3:4 portrait"
-        : "4:3 landscape";
+      aspectRatio === "square" ? "1:1 square" : aspectRatio === "portrait" ? "3:4 portrait" : "4:3 landscape";
 
     // Build text instruction conditionally
     const textInstruction =
@@ -138,7 +125,7 @@ TEXT REQUIREMENT:
 ${textInstruction}
 
 OUTPUT REQUIREMENTS:
-- Clean PNG with transparent background (REQUIRED)
+- Clean PNG with design background (REQUIRED)
 - Just the artwork/graphic itself, NOT placed on any clothing or mockup
 - High-resolution suitable for print (300 DPI)
 - Centered and balanced composition
@@ -167,22 +154,22 @@ OUTPUT REQUIREMENTS:
       console.error("AI gateway error:", status, errorText);
 
       if (status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
       if (status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Payment required. Please add funds to your account." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Payment required. Please add funds to your account." }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      return new Response(
-        JSON.stringify({ error: "AI service error", details: errorText }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "AI service error", details: errorText }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const data = await response.json();
@@ -211,7 +198,7 @@ OUTPUT REQUIREMENTS:
         imageUrl,
         includedText: text || null,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     console.error("Function error:", error);
@@ -219,7 +206,7 @@ OUTPUT REQUIREMENTS:
       JSON.stringify({
         error: error instanceof Error ? error.message : "Unknown error",
       }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
