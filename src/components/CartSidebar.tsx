@@ -1,4 +1,5 @@
 import { X, Minus, Plus, ShoppingBag } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/contexts/CartContext";
 import {
@@ -16,7 +17,13 @@ interface CartSidebarProps {
 }
 
 export const CartSidebar = ({ open, onClose }: CartSidebarProps) => {
+  const navigate = useNavigate();
   const { cart, removeFromCart, updateQuantity, cartTotal, clearCart } = useCart();
+
+  const handleCheckout = () => {
+    onClose(); // Close the sidebar
+    navigate('/checkout'); // Navigate to checkout page
+  };
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
@@ -94,7 +101,7 @@ export const CartSidebar = ({ open, onClose }: CartSidebarProps) => {
             </ScrollArea>
 
             <SheetFooter className="flex-col gap-4 mt-4">
-                <div className="flex justify-between items-center text-lg font-bold">
+              <div className="flex justify-between items-center text-lg font-bold">
                 <span>Total:</span>
                 <span>Rs {cartTotal.toFixed(2)}</span>
               </div>
@@ -102,7 +109,7 @@ export const CartSidebar = ({ open, onClose }: CartSidebarProps) => {
                 <Button variant="outline" onClick={clearCart} className="flex-1">
                   Clear Cart
                 </Button>
-                <Button className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90">
+                <Button onClick={handleCheckout} className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90">
                   Checkout
                 </Button>
               </div>

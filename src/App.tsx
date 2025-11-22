@@ -26,6 +26,7 @@ import AdminDesignerForm from "./pages/admin/AdminDesignerForm";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import DesignerDetail from "./pages/DesignerDetail";
 import NotFound from "./pages/NotFound";
+import  {CheckoutPage } from "./pages/CheckOut";
 
 const queryClient = new QueryClient();
 
@@ -50,6 +51,7 @@ const App = () => (
                   <Route path="/women" element={<Women />} />
                   <Route path="/accessories" element={<Accessories />} />
                   <Route path="/sale" element={<Sale />} />
+                  <Route path="/checkout" element={<CheckoutPage />} />
                   
                   {/* Hidden Admin Routes */}
                   <Route path="/admintesora" element={<AdminLogin />} />
