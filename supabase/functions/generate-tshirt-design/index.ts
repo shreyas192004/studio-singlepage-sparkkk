@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Input validation schema - matches all frontend options exactly
+// Input validation schema - matches all frontend options exactly (updated)
 const designRequestSchema = z.object({
   prompt: z
     .string()
