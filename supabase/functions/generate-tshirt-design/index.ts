@@ -125,11 +125,10 @@ TEXT REQUIREMENT:
 ${textInstruction}
 
 OUTPUT REQUIREMENTS:
-- Clean PNG with design background (REQUIRED)
 - Just the artwork/graphic itself, NOT placed on any clothing or mockup
 - High-resolution suitable for print (300 DPI)
 - Centered and balanced composition
-- No watermarks, signatures, or backgrounds
+- No watermarks,signatures
 - The design should be isolated and ready to overlay on any surface`;
 
     console.log("Enhanced prompt:", enhancedPrompt);
