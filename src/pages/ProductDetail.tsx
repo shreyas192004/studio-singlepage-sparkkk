@@ -29,10 +29,10 @@ const ProductDetail = () => {
       try {
         setLoading(true);
         const { data, error } = await supabase
-          .from('products')
-          .select('*')
-          .eq('id', id)
-          .eq('visibility', 'public')
+          .from("products")
+          .select("*")
+          .eq("id", id)
+          .eq("visibility", "public")
           .single();
 
         if (error) throw error;
@@ -41,18 +41,18 @@ const ProductDetail = () => {
         // Fetch related products from same category
         if (data?.category) {
           const { data: related } = await supabase
-            .from('products')
-            .select('*')
-            .eq('visibility', 'public')
-            .eq('category', data.category)
-            .neq('id', id)
+            .from("products")
+            .select("*")
+            .eq("visibility", "public")
+            .eq("category", data.category)
+            .neq("id", id)
             .limit(4);
-          
+
           setRelatedProducts(related || []);
         }
       } catch (error) {
-        console.error('Error fetching product:', error);
-        toast.error('Failed to load product');
+        console.error("Error fetching product:", error);
+        toast.error("Failed to load product");
       } finally {
         setLoading(false);
       }
@@ -98,9 +98,9 @@ const ProductDetail = () => {
       id: product.id,
       name: product.title,
       price: product.price,
-      image: product.images?.[0] || '',
-      size: selectedSize || product.sizes?.[0] || '',
-      color: selectedColor || product.colors?.[0] || '',
+      image: product.images?.[0] || "",
+      size: selectedSize || product.sizes?.[0] || "",
+      color: selectedColor || product.colors?.[0] || "",
     });
 
     toast.success(`Added ${product.title} to cart!`);
@@ -112,12 +112,10 @@ const ProductDetail = () => {
       name: product.title,
       price: product.price,
       oldPrice: product.compare_at_price,
-      image: product.images?.[0] || '',
-      tag: product.tags?.[0] || '',
+      image: product.images?.[0] || "",
+      tag: product.tags?.[0] || "",
     });
-    toast.success(
-      isInWishlist(product.id) ? "Removed from wishlist" : "Added to wishlist"
-    );
+    toast.success(isInWishlist(product.id) ? "Removed from wishlist" : "Added to wishlist");
   };
 
   return (
@@ -130,12 +128,16 @@ const ProductDetail = () => {
               TESORA
             </Link>
             <div className="hidden md:flex items-center gap-8">
-              <Link to="/" className="hover:text-accent transition-colors">Shop</Link>
-              <Link to="/ai-generator" className="hover:text-accent transition-colors">AI Generation</Link>
-              <Link to="/men" className="hover:text-accent transition-colors">Men</Link>
+              <Link to="/" className="hover:text-accent transition-colors">
+                Shop
+              </Link>
+              <Link to="/ai-generator" className="hover:text-accent transition-colors">
+                AI Generation
+              </Link>
+              {/* <Link to="/men" className="hover:text-accent transition-colors">Men</Link>
               <Link to="/women" className="hover:text-accent transition-colors">Women</Link>
               <Link to="/accessories" className="hover:text-accent transition-colors">Accessories</Link>
-              <Link to="/sale" className="hover:text-accent transition-colors">Sale</Link>
+              <Link to="/sale" className="hover:text-accent transition-colors">Sale</Link> */}
             </div>
             <div className="flex items-center gap-4">
               <button className="hover:text-accent transition-colors">
@@ -144,10 +146,7 @@ const ProductDetail = () => {
               <button className="hover:text-accent transition-colors">
                 <User className="w-5 h-5" />
               </button>
-              <button
-                onClick={() => setCartOpen(true)}
-                className="hover:text-accent transition-colors relative"
-              >
+              <button onClick={() => setCartOpen(true)} className="hover:text-accent transition-colors relative">
                 <ShoppingCart className="w-5 h-5" />
                 {cartCount > 0 && (
                   <span className="absolute -top-2 -right-2 bg-accent text-accent-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
@@ -172,7 +171,7 @@ const ProductDetail = () => {
           <div className="space-y-4">
             <div className="aspect-[3/4] rounded-xl overflow-hidden">
               <img
-                src={product.images?.[selectedImage] || product.images?.[0] || ''}
+                src={product.images?.[selectedImage] || product.images?.[0] || ""}
                 alt={product.title}
                 className="w-full h-full object-cover"
               />
@@ -199,7 +198,9 @@ const ProductDetail = () => {
             <div>
               <h1 className="text-4xl font-bold mb-2">{product.title}</h1>
               <div className="flex items-center gap-3">
-                <span className="text-3xl font-bold">{product.currency || 'INR'} {product.price}</span>
+                <span className="text-3xl font-bold">
+                  {product.currency || "INR"} {product.price}
+                </span>
                 {product.compare_at_price && (
                   <span className="text-xl text-muted-foreground line-through">{product.compare_at_price}</span>
                 )}
@@ -261,19 +262,11 @@ const ProductDetail = () => {
             <div>
               <Label className="text-base font-semibold mb-3 block">Quantity</Label>
               <div className="flex items-center gap-4">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                >
+                <Button variant="outline" size="icon" onClick={() => setQuantity(Math.max(1, quantity - 1))}>
                   <Minus className="w-4 h-4" />
                 </Button>
                 <span className="text-xl font-semibold w-12 text-center">{quantity}</span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setQuantity(quantity + 1)}
-                >
+                <Button variant="outline" size="icon" onClick={() => setQuantity(quantity + 1)}>
                   <Plus className="w-4 h-4" />
                 </Button>
               </div>
@@ -289,14 +282,8 @@ const ProductDetail = () => {
                 <ShoppingCart className="w-5 h-5 mr-2" />
                 Add to Cart
               </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={handleWishlistToggle}
-              >
-                <Heart
-                  className={`w-5 h-5 ${isInWishlist(product.id) ? "fill-current text-red-500" : ""}`}
-                />
+              <Button size="lg" variant="outline" onClick={handleWishlistToggle}>
+                <Heart className={`w-5 h-5 ${isInWishlist(product.id) ? "fill-current text-red-500" : ""}`} />
               </Button>
             </div>
           </div>
@@ -307,21 +294,19 @@ const ProductDetail = () => {
           <div className="mt-20">
             <h2 className="text-3xl font-bold mb-8">You May Also Like</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              {relatedProducts.map(related => (
-                <Link
-                  key={related.id}
-                  to={`/product/${related.id}`}
-                  className="group cursor-pointer"
-                >
+              {relatedProducts.map((related) => (
+                <Link key={related.id} to={`/product/${related.id}`} className="group cursor-pointer">
                   <div className="relative mb-3 overflow-hidden rounded-lg aspect-[3/4]">
                     <img
-                      src={related.images?.[0] || ''}
+                      src={related.images?.[0] || ""}
                       alt={related.title}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                     />
                   </div>
                   <h3 className="font-semibold text-sm mb-1">{related.title}</h3>
-                  <p className="font-bold">{related.currency || 'INR'} {related.price}</p>
+                  <p className="font-bold">
+                    {related.currency || "INR"} {related.price}
+                  </p>
                 </Link>
               ))}
             </div>
