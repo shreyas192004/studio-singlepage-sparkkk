@@ -381,7 +381,7 @@ const Index: React.FC = () => {
                   <div key={product.id} className="group relative bg-card rounded-lg overflow-hidden">
                     <Link to={`/products/${product.id}`}>
                       <div className="relative mb-2 overflow-hidden aspect-[3/4]">
-                        <img src={product.image} alt={product.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                        <img src={product.image} alt={product.name} className="w-full h-full text-gray-950  object-cover transition-transform duration-500 group-hover:scale-105" />
                         {product.tag && (
                           <span className={`absolute top-3 right-3 px-3 py-1 text-xs font-semibold rounded-full ${
                             product.tag === "Sale" ? "bg-accent text-accent-foreground" : "bg-sale-blue text-white"
@@ -392,16 +392,16 @@ const Index: React.FC = () => {
                       </div>
                     </Link>
 
-                    <div className="p-3">
+                    <div className="p-3 bg-transparent">
                       <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-semibold text-sm truncate">{product.name}</h3>
+                        <h3 className="font-semibold text-sm truncate text-slate-950">{product.name}</h3>
                         <button onClick={() => handleWishlistToggle(product)} className="p-2 rounded-md hover:bg-primary-foreground/6">
-                          <Heart className={`w-5 h-5 ${isInWishlist(product.id) ? "fill-current text-red-500" : ""}`} />
+                          <Heart className={`w-5 h-5 text-slate-950 ${isInWishlist(product.id) ?  "fill-current text-red-500" : ""}`} />
                         </button>
                       </div>
 
                       <div className="flex items-center gap-2 mt-2">
-                        <span className="font-bold">Rs {product.price.toFixed(2)}</span>
+                        <span className="font-bold text-slate-950">Rs {product.price.toFixed(2)}</span>
                         {product.oldPrice && <span className="text-sm text-muted-foreground line-through">Rs {product.oldPrice}</span>}
                       </div>
                     </div>
@@ -423,7 +423,7 @@ const Index: React.FC = () => {
         <img src="https://placehold.co/1600x600/57534E/FFFFFF?text=Sale+Models" alt="Sale is On" className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-primary/60 flex items-center justify-center">
           <div className="text-center text-primary-foreground px-4">
-            <h2 className="text-3xl sm:text-4xl md:text-6xl font-bold mb-2">SALE IS ON</h2>
+            <h2 className="text-3xl sm:text-4xl md:text-6xl  font-bold mb-2">SALE IS ON</h2>
             <p className="text-sm sm:text-lg md:text-xl mb-4">End of the season sale. Up to 40% off.</p>
             <Button size="lg" className="bg-accent text-accent-foreground hover:bg-accent/90 px-6 py-3 rounded-lg">
               Shop Sale
