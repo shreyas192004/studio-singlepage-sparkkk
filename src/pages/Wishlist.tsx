@@ -29,10 +29,10 @@ const Wishlist = () => {
               TESORA
             </Link>
             <div className="hidden md:flex items-center gap-8">
-              <Link to="/" className="hover:text-accent transition-colors">Men</Link>
-              <Link to="/" className="hover:text-accent transition-colors">Women</Link>
-              <Link to="/" className="hover:text-accent transition-colors">Accessories</Link>
-              <Link to="/" className="hover:text-accent transition-colors">Sale</Link>
+              <Link to="/" className="hover:text-accent transition-colors">Shop</Link>
+              <Link to="/ai-generator" className="hover:text-accent transition-colors">Ai Generator</Link>
+              {/* <Link to="/" className="hover:text-accent transition-colors">Accessories</Link>
+              <Link to="/" className="hover:text-accent transition-colors">Sale</Link> */}
             </div>
             <div className="flex items-center gap-4">
               <button className="hover:text-accent transition-colors">
