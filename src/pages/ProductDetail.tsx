@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { CartSidebar } from "@/components/CartSidebar";
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -129,10 +130,12 @@ const ProductDetail = () => {
               TESORA
             </Link>
             <div className="hidden md:flex items-center gap-8">
-              <Link to="/" className="hover:text-accent transition-colors">Men</Link>
-              <Link to="/" className="hover:text-accent transition-colors">Women</Link>
-              <Link to="/" className="hover:text-accent transition-colors">Accessories</Link>
-              <Link to="/" className="hover:text-accent transition-colors">Sale</Link>
+              <Link to="/" className="hover:text-accent transition-colors">Shop</Link>
+              <Link to="/ai-generator" className="hover:text-accent transition-colors">AI Generation</Link>
+              <Link to="/men" className="hover:text-accent transition-colors">Men</Link>
+              <Link to="/women" className="hover:text-accent transition-colors">Women</Link>
+              <Link to="/accessories" className="hover:text-accent transition-colors">Accessories</Link>
+              <Link to="/sale" className="hover:text-accent transition-colors">Sale</Link>
             </div>
             <div className="flex items-center gap-4">
               <button className="hover:text-accent transition-colors">
@@ -325,6 +328,9 @@ const ProductDetail = () => {
           </div>
         )}
       </div>
+
+      {/* Cart Sidebar */}
+      <CartSidebar open={cartOpen} onClose={() => setCartOpen(false)} />
     </div>
   );
 };
