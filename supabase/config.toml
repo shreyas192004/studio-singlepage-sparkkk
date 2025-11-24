@@ -1,1 +1,4 @@
 project_id = "ubqxlkvdbmkvtesmmwvj"
+
+[functions.generate-tshirt-design]
+verify_jwt = false
