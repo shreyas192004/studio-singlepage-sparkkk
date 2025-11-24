@@ -343,14 +343,14 @@ const AIGenerator = () => {
           <img
             src={generatedImage}
             alt="generated design overlay"
-            className="absolute shadow-xl rounded-md"
+            className="absolute"
             style={{
               width: `${overlayPreset.widthPct}%`,
               left: `${overlayPreset.leftPct}%`,
               top: `${overlayPreset.topPct}%`,
               transform: `rotate(${overlayPreset.rotate ?? 0}deg)`,
               objectFit: "contain",
-              filter: "drop-shadow(0 6px 14px rgba(0,0,0,0.18))",
+              // filter: "drop-shadow(0 6px 14px rgba(0,0,0,0.18))",
             }}
             draggable={false}
             crossOrigin="anonymous"

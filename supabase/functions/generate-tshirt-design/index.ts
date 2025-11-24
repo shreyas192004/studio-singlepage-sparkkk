@@ -39,7 +39,7 @@ const designRequestSchema = z.object({
     "warm",
     "gradient",
   ]),
-  aspectRatio: z.enum(["square", "portrait", "landscape"]).optional().default("square"),
+  aspectRatio: z.enum(["square", "portrait", "landscape"]).optional().default("portrait"),
   quality: z.enum(["standard", "high", "ultra"]).optional().default("high"),
   creativity: z.number().min(0).max(100).optional().default(70),
   text: z.string().trim().max(120).optional(),
@@ -125,8 +125,8 @@ TEXT REQUIREMENT:
 ${textInstruction}
 
 OUTPUT REQUIREMENTS:
-- Clean PNG with design background (REQUIRED)
 - Just the artwork/graphic itself, NOT placed on any clothing or mockup
+- design should full as per aspect ratio ${aspectDesc}
 - High-resolution suitable for print (300 DPI)
 - Centered and balanced composition
 - No watermarks, signatures, or backgrounds
