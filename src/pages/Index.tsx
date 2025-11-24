@@ -65,7 +65,11 @@ const Index: React.FC = () => {
           .select("*")
           .eq("visibility", "public");
 
-        if (error) throw error;
+        if (error) {
+          console.error("Error fetching products:", error);
+          toast.error("Failed to load products. Please refresh the page.");
+          return;
+        }
 
         // Transform database products to match the expected format
         const transformedProducts =
@@ -83,9 +87,9 @@ const Index: React.FC = () => {
           })) || [];
 
         setAllProducts(transformedProducts);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching products:", error);
-        toast.error("Failed to load products");
+        toast.error(`Failed to load products: ${error.message || "Network error"}`);
       } finally {
         setIsLoadingProducts(false);
       }

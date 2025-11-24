@@ -64,7 +64,7 @@ const Auth = () => {
       if (error) {
         toast.error(error.message ?? "Google sign-in failed");
       } else {
-        toast('Redirecting to Google...', { type: 'info' });
+        toast.info('Redirecting to Google...');
         // The redirect happens automatically, no further action here.
       }
     } catch (err) {
