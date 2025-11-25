@@ -6,10 +6,22 @@ import { Label } from '@/components/ui/label';
 import { useCart } from '@/contexts/CartContext';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 export const CheckoutPage = () => {
   const navigate = useNavigate();
   const { cart, cartTotal, clearCart } = useCart();
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     name: '',
@@ -20,6 +32,8 @@ export const CheckoutPage = () => {
   });
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderId, setOrderId] = useState('');
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -29,13 +43,122 @@ export const CheckoutPage = () => {
   };
 
   const generateInvoicePDF = (orderNumber: string) => {
+    const invoiceHTML = generateInvoiceHTML(orderNumber);
+    
+    // Create a Blob from the HTML
+    const blob = new Blob([invoiceHTML], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    
+    // Create a temporary link and trigger download
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Invoice_${orderNumber}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePlaceOrder = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validate form
+    if (!formData.email || !formData.name || !formData.address || !formData.city || !formData.pincode || !formData.phone) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    if (!user) {
+      toast.error('Please sign in to place an order');
+      return;
+    }
+
+    // Show confirmation dialog
+    setShowConfirmDialog(true);
+  };
+
+  const confirmAndPlaceOrder = async () => {
+    setShowConfirmDialog(false);
+    setIsProcessing(true);
+
+    try {
+      // Generate order number
+      const newOrderId = `ORD${Date.now().toString().slice(-8)}`;
+
+      // Insert order into database
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          user_id: user!.id,
+          order_number: newOrderId,
+          total_amount: cartTotal,
+          status: 'pending',
+          payment_status: 'pending',
+          payment_method: 'cash_on_delivery',
+        })
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+
+      // Insert order items
+      const orderItems = cart.map(item => ({
+        order_id: orderData.id,
+        product_id: item.id.toString(),
+        product_name: item.name,
+        product_image: item.image,
+        quantity: item.quantity,
+        unit_price: item.price,
+        total_price: item.price * item.quantity,
+        size: item.size || null,
+        color: item.color || null,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+
+      if (itemsError) throw itemsError;
+
+      // Generate and upload invoice to storage
+      const invoiceHTML = generateInvoiceHTML(newOrderId);
+      const blob = new Blob([invoiceHTML], { type: 'text/html' });
+      
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(`invoices/${newOrderId}.html`, blob, {
+          contentType: 'text/html',
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Set order as placed
+      setOrderId(newOrderId);
+      setOrderPlaced(true);
+
+      // Auto-download invoice
+      setTimeout(() => {
+        generateInvoicePDF(newOrderId);
+      }, 500);
+
+      toast.success('Order placed successfully!');
+    } catch (error: any) {
+      console.error('Error placing order:', error);
+      toast.error(error.message || 'Failed to place order. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const generateInvoiceHTML = (orderNumber: string) => {
     const invoiceDate = new Date().toLocaleDateString('en-IN', {
       day: '2-digit',
       month: 'short',
       year: 'numeric'
     });
 
-    let invoiceHTML = `
+    return `
       <!DOCTYPE html>
       <html>
       <head>
@@ -194,39 +317,6 @@ export const CheckoutPage = () => {
       </body>
       </html>
     `;
-
-    // Create a Blob from the HTML
-    const blob = new Blob([invoiceHTML], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    
-    // Create a temporary link and trigger download
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Invoice_${orderNumber}.html`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  const handlePlaceOrder = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Validate form
-    if (!formData.email || !formData.name || !formData.address || !formData.city || !formData.pincode || !formData.phone) {
-      alert('Please fill in all fields');
-      return;
-    }
-
-    // Generate order ID
-    const newOrderId = `ORD${Date.now().toString().slice(-8)}`;
-    setOrderId(newOrderId);
-    setOrderPlaced(true);
-
-    // Auto-download invoice
-    setTimeout(() => {
-      generateInvoicePDF(newOrderId);
-    }, 500);
   };
 
   const handleContinue = () => {
@@ -391,11 +481,60 @@ export const CheckoutPage = () => {
               <Button
                 type="submit"
                 className="w-full bg-accent text-accent-foreground hover:bg-accent/90 h-12 text-lg"
+                disabled={isProcessing}
               >
-                Place Order - Rs {cartTotal.toFixed(2)}
+                {isProcessing ? 'Processing...' : `Place Order - Rs ${cartTotal.toFixed(2)}`}
               </Button>
             </form>
           </div>
+
+          {/* Confirmation Dialog */}
+          <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Confirm Your Order</DialogTitle>
+                <DialogDescription>
+                  Please review your order details before confirming.
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-semibold mb-2">Shipping To:</h4>
+                  <p className="text-sm text-muted-foreground">
+                    {formData.name}<br />
+                    {formData.address}<br />
+                    {formData.city}, {formData.pincode}<br />
+                    {formData.phone}
+                  </p>
+                </div>
+                
+                <div>
+                  <h4 className="font-semibold mb-2">Order Summary:</h4>
+                  <p className="text-sm text-muted-foreground">
+                    {cart.length} item(s) - Total: Rs {cartTotal.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowConfirmDialog(false)}
+                  disabled={isProcessing}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={confirmAndPlaceOrder}
+                  disabled={isProcessing}
+                  className="bg-accent text-accent-foreground hover:bg-accent/90"
+                >
+                  {isProcessing ? 'Processing...' : 'Confirm Order'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Order Summary */}
           <div className="lg:col-span-1">
