@@ -33,7 +33,7 @@ const DesignerLogin = () => {
     }
 
     toast.success("Welcome, Designer!");
-    navigate("/designer/dashboard");
+    // Don't navigate here - let useEffect handle redirect after role is confirmed
   };
 
   if (loading) {
