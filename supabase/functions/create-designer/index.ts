@@ -108,7 +108,8 @@ serve(async (req) => {
     );
 
   } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), {
+    const error = e as Error;
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: corsHeaders,
     });

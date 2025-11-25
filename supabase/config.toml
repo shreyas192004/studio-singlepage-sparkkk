@@ -2,3 +2,6 @@ project_id = "ubqxlkvdbmkvtesmmwvj"
 
 [functions.generate-tshirt-design]
 verify_jwt = false
+
+[functions.create-designer]
+verify_jwt = false
