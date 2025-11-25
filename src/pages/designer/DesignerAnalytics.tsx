@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { useAdmin } from "@/contexts/AdminContext";
+import { useDesigner } from "@/contexts/DesignerContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,7 +16,7 @@ import { Home, Download } from "lucide-react";
 import { toast } from "sonner";
 
 const DesignerAnalytics = () => {
-  const { isAdmin, loading } = useAdmin();
+  const { isDesigner, loading } = useDesigner();
   const navigate = useNavigate();
   const [stats, setStats] = useState<any>({
     totalEvents: 0,
@@ -28,16 +28,16 @@ const DesignerAnalytics = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!loading && !isAdmin) {
-      navigate("/admintesora");
+    if (!loading && !isDesigner) {
+      navigate("/designer/login");
     }
-  }, [isAdmin, loading, navigate]);
+  }, [isDesigner, loading, navigate]);
 
   useEffect(() => {
-    if (isAdmin) {
+    if (isDesigner) {
       fetchAnalytics();
     }
-  }, [isAdmin]);
+  }, [isDesigner]);
 
   const fetchAnalytics = async () => {
     try {
@@ -180,7 +180,7 @@ const DesignerAnalytics = () => {
     toast.success("AI Generations CSV exported successfully");
   };
 
-  if (loading || !isAdmin) {
+  if (loading || !isDesigner) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
@@ -195,7 +195,7 @@ const DesignerAnalytics = () => {
                 <Download className="mr-2 h-4 w-4" />
                 Export CSV
               </Button>
-              <Link to="/admintesora/dashboard">
+              <Link to="/designer/dashboard">
                 <Button variant="outline">
                   <Home className="mr-2 h-4 w-4" />
                   Dashboard

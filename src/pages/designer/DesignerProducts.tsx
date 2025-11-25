@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { useAdmin } from "@/contexts/AdminContext";
+import { useDesigner } from "@/contexts/DesignerContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,23 +18,23 @@ import { Plus, Edit, Trash2, Eye, EyeOff, Home } from "lucide-react";
 import { toast } from "sonner";
 
 const DesignerProducts = () => {
-  const { isAdmin, loading } = useAdmin();
+  const { isDesigner, loading } = useDesigner();
   const navigate = useNavigate();
   const [products, setProducts] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!loading && !isAdmin) {
-      navigate("/admintesora");
+    if (!loading && !isDesigner) {
+      navigate("/designer/login");
     }
-  }, [isAdmin, loading, navigate]);
+  }, [isDesigner, loading, navigate]);
 
   useEffect(() => {
-    if (isAdmin) {
+    if (isDesigner) {
       fetchProducts();
     }
-  }, [isAdmin]);
+  }, [isDesigner]);
 
   const fetchProducts = async () => {
     const { data, error } = await (supabase as any)
@@ -84,7 +84,7 @@ const DesignerProducts = () => {
       p.sku.toLowerCase().includes(search.toLowerCase())
   );
 
-  if (loading || !isAdmin) {
+  if (loading || !isDesigner) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
@@ -95,7 +95,7 @@ const DesignerProducts = () => {
           <div className="flex justify-between items-center">
             <h1 className="text-2xl font-bold">Products Management</h1>
             <div className="flex gap-2">
-              <Link to="/admintesora/dashboard">
+              <Link to="/designer/dashboard">
                 <Button variant="outline">
                   <Home className="mr-2 h-4 w-4" />
                   Dashboard

@@ -1,30 +1,30 @@
 import { useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { useAdmin } from "@/contexts/AdminContext";
+import { useDesigner } from "@/contexts/DesignerContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Package, Users, BarChart3, LogOut } from "lucide-react";
 
 const DesignerDashboard = () => {
-  const { isAdmin, loading, signOut } = useAdmin();
+  const { isDesigner, loading, signOut } = useDesigner();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!loading && !isAdmin) {
-      navigate("/admintesora");
+    if (!loading && !isDesigner) {
+      navigate("/designer/login");
     }
-  }, [isAdmin, loading, navigate]);
+  }, [isDesigner, loading, navigate]);
 
   const handleSignOut = async () => {
     await signOut();
-    navigate("/admintesora");
+    navigate("/designer/login");
   };
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
-  if (!isAdmin) {
+  if (!isDesigner) {
     return null;
   }
 
@@ -32,7 +32,7 @@ const DesignerDashboard = () => {
     <div className="min-h-screen bg-background">
       <header className="border-b">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+          <h1 className="text-2xl font-bold">Designer Dashboard</h1>
           <Button variant="outline" onClick={handleSignOut}>
             <LogOut className="mr-2 h-4 w-4" />
             Sign Out
