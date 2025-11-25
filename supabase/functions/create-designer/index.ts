@@ -72,6 +72,16 @@ serve(async (req) => {
     }
 
     if (!userRes.ok) {
+      // Handle email already exists case with user-friendly message
+      if (userJson?.error_code === 'email_exists' || userJson?.code === 422) {
+        return new Response(
+          JSON.stringify({ 
+            error: "A user with this email already exists. Please use a different email address." 
+          }), 
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      
       return new Response(JSON.stringify({ error: "Failed creating user", status: userRes.status, body: userJson }), {
         status: 500,
         headers: corsHeaders,
