@@ -171,6 +171,7 @@ export type Database = {
           name: string
           social_links: Json | null
           updated_at: string | null
+          user_id: string | null
           women_only: boolean | null
         }
         Insert: {
@@ -183,6 +184,7 @@ export type Database = {
           name: string
           social_links?: Json | null
           updated_at?: string | null
+          user_id?: string | null
           women_only?: boolean | null
         }
         Update: {
@@ -195,6 +197,7 @@ export type Database = {
           name?: string
           social_links?: Json | null
           updated_at?: string | null
+          user_id?: string | null
           women_only?: boolean | null
         }
         Relationships: []
@@ -483,7 +486,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "moderator" | "user"
+      app_role: "admin" | "moderator" | "user" | "designer"
       order_status:
         | "pending"
         | "confirmed"
@@ -619,7 +622,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "moderator", "user"],
+      app_role: ["admin", "moderator", "user", "designer"],
       order_status: [
         "pending",
         "confirmed",
