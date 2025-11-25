@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { Heart, ShoppingCart, Search, User, Minus, Plus } from "lucide-react";
+import { Heart, ShoppingCart, Search, User, Minus, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/contexts/CartContext";
 import { useWishlist } from "@/contexts/WishlistContext";
@@ -23,6 +23,10 @@ const ProductDetail = () => {
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState("");
   const [quantity, setQuantity] = useState(1);
+
+  // Bulk modal state (company details)
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [bulkModalProduct, setBulkModalProduct] = useState<any | null>(null);
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -84,6 +88,43 @@ const ProductDetail = () => {
     );
   }
 
+  const openBulkModal = (productForBulk?: any) => {
+    setBulkModalProduct(productForBulk || product);
+    setBulkModalOpen(true);
+  };
+
+  const closeBulkModal = () => {
+    setBulkModalOpen(false);
+    setBulkModalProduct(null);
+  };
+
+  const handleContactSales = () => {
+    if (!bulkModalProduct) return;
+    const payload = {
+      productId: bulkModalProduct.id,
+      // include intended quantity so sales knows the requirement
+      requestedQuantity: quantity,
+    };
+    closeBulkModal();
+    // If you want to keep the cart open or not, adjust behavior — here we close it and navigate
+    setCartOpen(false);
+    navigate("/bulk", { state: payload });
+  };
+
+  // Increase quantity but enforce max 9. If attempt to exceed, open bulk modal.
+  const handleIncreaseQuantity = () => {
+    if (quantity >= 9) {
+      // show bulk modal for product
+      openBulkModal(product);
+      return;
+    }
+    setQuantity((q) => Math.min(9, q + 1));
+  };
+
+  const handleDecreaseQuantity = () => {
+    setQuantity((q) => Math.max(1, q - 1));
+  };
+
   const handleAddToCart = () => {
     if (product.sizes?.length > 1 && !selectedSize) {
       toast.error("Please select a size");
@@ -94,6 +135,13 @@ const ProductDetail = () => {
       return;
     }
 
+    // If quantity > 9 (shouldn't happen because UI restricts), prompt bulk modal
+    if (quantity > 9) {
+      openBulkModal(product);
+      return;
+    }
+
+    // Add to cart with selected quantity
     addToCart({
       id: product.id,
       name: product.title,
@@ -101,9 +149,12 @@ const ProductDetail = () => {
       image: product.images?.[0] || "",
       size: selectedSize || product.sizes?.[0] || "",
       color: selectedColor || product.colors?.[0] || "",
+      quantity: quantity,
     });
 
-    toast.success(`Added ${product.title} to cart!`);
+    toast.success(`Added ${product.title} x${quantity} to cart!`);
+    // Optionally open cart sidebar
+    setCartOpen(true);
   };
 
   const handleWishlistToggle = () => {
@@ -134,10 +185,6 @@ const ProductDetail = () => {
               <Link to="/ai-generator" className="hover:text-accent transition-colors">
                 AI Generation
               </Link>
-              {/* <Link to="/men" className="hover:text-accent transition-colors">Men</Link>
-              <Link to="/women" className="hover:text-accent transition-colors">Women</Link>
-              <Link to="/accessories" className="hover:text-accent transition-colors">Accessories</Link>
-              <Link to="/sale" className="hover:text-accent transition-colors">Sale</Link> */}
             </div>
             <div className="flex items-center gap-4">
               <button className="hover:text-accent transition-colors">
@@ -262,13 +309,14 @@ const ProductDetail = () => {
             <div>
               <Label className="text-base font-semibold mb-3 block">Quantity</Label>
               <div className="flex items-center gap-4">
-                <Button variant="outline" size="icon" onClick={() => setQuantity(Math.max(1, quantity - 1))}>
+                <Button variant="outline" size="icon" onClick={handleDecreaseQuantity}>
                   <Minus className="w-4 h-4" />
                 </Button>
                 <span className="text-xl font-semibold w-12 text-center">{quantity}</span>
-                <Button variant="outline" size="icon" onClick={() => setQuantity(quantity + 1)}>
+                <Button variant="outline" size="icon" onClick={handleIncreaseQuantity}>
                   <Plus className="w-4 h-4" />
                 </Button>
+                {quantity >= 9 && <span className="text-xs text-muted-foreground ml-2">Max 9 — for bulk orders contact sales</span>}
               </div>
             </div>
 
@@ -316,6 +364,59 @@ const ProductDetail = () => {
 
       {/* Cart Sidebar */}
       <CartSidebar open={cartOpen} onClose={() => setCartOpen(false)} />
+
+      {/* Bulk modal (company details) */}
+      {bulkModalOpen && bulkModalProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/40" onClick={closeBulkModal} aria-hidden />
+          <div className="relative z-10 w-full max-w-md bg-popover rounded-2xl shadow-lg p-6">
+            <div className="flex items-start justify-between">
+              <h3 className="text-lg font-semibold">Bulk order — Company details</h3>
+              <Button variant="ghost" size="icon" onClick={closeBulkModal}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <p className="text-sm text-muted-foreground mt-2">
+              Product: <span className="font-medium">{bulkModalProduct.name || bulkModalProduct.title}</span>
+            </p>
+
+            <div className="mt-4 space-y-3 text-sm">
+              <div>
+                <div className="text-xs text-muted-foreground">Company</div>
+                <div className="font-medium">Acme Supplies Pvt. Ltd.</div>
+              </div>
+
+              <div>
+                <div className="text-xs text-muted-foreground">Sales email</div>
+                <div className="font-medium">sales@acmesupplies.example</div>
+              </div>
+
+              <div>
+                <div className="text-xs text-muted-foreground">Phone</div>
+                <div className="font-medium">+91 98765 43210</div>
+              </div>
+
+              <div>
+                <div className="text-xs text-muted-foreground">Address</div>
+                <div className="font-medium">123 Industrial Park, Pune, MH — 411045</div>
+              </div>
+
+              <div>
+                <div className="text-xs text-muted-foreground">GST / CIN</div>
+                <div className="font-medium">27ABCDE1234F1Z5</div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end pt-4">
+              <Button variant="outline" onClick={closeBulkModal}>
+                Close
+              </Button>
+              <Button onClick={handleContactSales}>Contact Sales</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
