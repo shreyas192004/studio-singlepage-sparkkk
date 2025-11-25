@@ -11,13 +11,27 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Home } from "lucide-react";
 import { toast } from "sonner";
 
+type DesignerForm = {
+  name: string;
+  bio: string;
+  avatar_url: string;
+  social_links: {
+    instagram: string;
+    twitter: string;
+    website: string;
+  };
+  featured: boolean;
+  men_only: boolean;
+  women_only: boolean;
+};
+
 const AdminDesignerForm = () => {
   const { isAdmin, loading } = useAdmin();
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = !!id;
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<DesignerForm>({
     name: "",
     bio: "",
     avatar_url: "",
@@ -31,11 +45,11 @@ const AdminDesignerForm = () => {
     women_only: false,
   });
 
+  // new auth inputs
   const [authData, setAuthData] = useState({
     email: "",
     password: "",
   });
-
 
   const [submitting, setSubmitting] = useState(false);
 
@@ -73,17 +87,48 @@ const AdminDesignerForm = () => {
     e.preventDefault();
     setSubmitting(true);
 
-    const { error } = isEdit
-      ? await (supabase as any).from("designers").update(formData).eq("id", id)
-      : await (supabase as any).from("designers").insert(formData);
+    try {
+      if (isEdit) {
+        // Update existing designer row directly
+        const { error } = await (supabase as any).from("designers").update(formData).eq("id", id);
+        if (error) {
+          toast.error("Failed to update designer");
+        } else {
+          toast.success("Designer updated successfully");
+          navigate("/admintesora/designers");
+        }
+      } else {
+        // CREATE flow using supabase.functions.invoke
+        if (!authData.email || !authData.password) {
+          toast.error("Email and password are required to create a designer");
+          setSubmitting(false);
+          return;
+        }
 
-    setSubmitting(false);
+        const { data, error } = await (supabase as any).functions.invoke("create-designer", {
+          body: {
+            email: authData.email,
+            password: authData.password,
+            designer: formData,
+          },
+        });
 
-    if (error) {
-      toast.error(`Failed to ${isEdit ? "update" : "create"} designer`);
-    } else {
-      toast.success(`Designer ${isEdit ? "updated" : "created"} successfully`);
-      navigate("/admintesora/designers");
+        if (error) {
+          // supabase error object may contain message or statusText
+          console.error("create-designer invoke error:", error);
+          toast.error((error as any).message || "Failed to create designer");
+        } else {
+          // `data` is what your edge function returns (user + designer)
+          console.log("create-designer response:", data);
+          toast.success("Designer created successfully");
+          navigate("/admintesora/designers");
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("An unexpected error occurred");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -206,9 +251,7 @@ const AdminDesignerForm = () => {
                 <Checkbox
                   id="featured"
                   checked={formData.featured}
-                  onCheckedChange={(checked) =>
-                    setFormData({ ...formData, featured: checked as boolean })
-                  }
+                  onCheckedChange={(checked) => setFormData({ ...formData, featured: checked as boolean })}
                 />
                 <Label htmlFor="featured">Featured Designer</Label>
               </div>
@@ -217,9 +260,7 @@ const AdminDesignerForm = () => {
                 <Checkbox
                   id="men_only"
                   checked={formData.men_only}
-                  onCheckedChange={(checked) =>
-                    setFormData({ ...formData, men_only: checked as boolean })
-                  }
+                  onCheckedChange={(checked) => setFormData({ ...formData, men_only: checked as boolean })}
                 />
                 <Label htmlFor="men_only">Men Only</Label>
               </div>
@@ -228,24 +269,53 @@ const AdminDesignerForm = () => {
                 <Checkbox
                   id="women_only"
                   checked={formData.women_only}
-                  onCheckedChange={(checked) =>
-                    setFormData({ ...formData, women_only: checked as boolean })
-                  }
+                  onCheckedChange={(checked) => setFormData({ ...formData, women_only: checked as boolean })}
                 />
                 <Label htmlFor="women_only">Women Only</Label>
               </div>
             </CardContent>
           </Card>
 
+          {!isEdit && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Account (will create auth user)</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    id="email"
+                    required
+                    type="email"
+                    value={authData.email}
+                    onChange={(e) => setAuthData({ ...authData, email: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="password">Password *</Label>
+                  <Input
+                    id="password"
+                    required
+                    type="password"
+                    value={authData.password}
+                    onChange={(e) => setAuthData({ ...authData, password: e.target.value })}
+                  />
+                </div>
+
+                <p className="text-sm text-muted-foreground">
+                  A user will be created in Supabase Auth and linked to the designer record.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           <div className="flex gap-4">
             <Button type="submit" disabled={submitting}>
               {submitting ? "Saving..." : isEdit ? "Update Designer" : "Create Designer"}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => navigate("/admintesora/designers")}
-            >
+            <Button type="button" variant="outline" onClick={() => navigate("/admintesora/designers")}>
               Cancel
             </Button>
           </div>
