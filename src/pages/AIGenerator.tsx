@@ -111,6 +111,9 @@ const AIGenerator = () => {
   const [clothingType, setClothingType] = useState<ClothingType>("t-shirt");
   const [imagePosition, setImagePosition] = useState<ImagePosition>("front");
 
+  // NEW: modal state for showing large design
+  const [showLargeModal, setShowLargeModal] = useState(false);
+
   useEffect(() => {
     const urlPrompt = searchParams.get("prompt");
     if (urlPrompt) setPrompt(urlPrompt);
@@ -129,6 +132,15 @@ const AIGenerator = () => {
       if (!["front", "back"].includes(imagePosition)) setImagePosition("front");
     }
   }, [clothingType]);
+
+  // Close modal on Esc
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowLargeModal(false);
+    };
+    if (showLargeModal) window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showLargeModal]);
 
   const handleGenerate = async () => {
     if (!user && generationCount >= FREE_USER_LIMIT) {
@@ -289,6 +301,18 @@ const AIGenerator = () => {
     img.src = generatedImage;
   };
 
+  // NEW: direct original download (no watermark)
+  const handleDownloadOriginal = () => {
+    if (!generatedImage) return;
+    const a = document.createElement("a");
+    a.href = generatedImage;
+    a.download = `tesora-design-${Date.now()}.png`;
+    // In some cross-origin scenarios, this may open the image in a new tab instead of downloading.
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const handleSurveySubmit = async () => {
     if (!surveyData.preferredStyle || !surveyData.preferredColorScheme || !surveyData.preferredClothingType) {
       return toast.error("Please answer all questions");
@@ -343,17 +367,17 @@ const AIGenerator = () => {
           <img
             src={generatedImage}
             alt="generated design overlay"
-            className="absolute"
+            className="absolute cursor-pointer"
             style={{
               width: `${overlayPreset.widthPct}%`,
               left: `${overlayPreset.leftPct}%`,
               top: `${overlayPreset.topPct}%`,
               transform: `rotate(${overlayPreset.rotate ?? 0}deg)`,
               objectFit: "contain",
-              // filter: "drop-shadow(0 6px 14px rgba(0,0,0,0.18))",
             }}
             draggable={false}
             crossOrigin="anonymous"
+            onClick={() => setShowLargeModal(true)} // NEW: open modal on click
           />
         )}
         {!generatedImage && (
@@ -369,7 +393,10 @@ const AIGenerator = () => {
             <Download className="w-5 h-5 mr-2" />
             Download with Watermark
           </Button>
-          <Button variant="outline" size="lg" onClick={handleGenerate} className="w-full">
+          <Button variant="outline" size="lg" onClick={() => setShowLargeModal(true)} className="w-full">
+            View Larger
+          </Button>
+          <Button variant="ghost" size="lg" onClick={handleGenerate} className="w-full">
             Regenerate
           </Button>
         </div>
@@ -630,6 +657,60 @@ const AIGenerator = () => {
           </div>
         </div>
       )}
+
+{/* LARGE DESIGN MODAL - PERFECT MEDIUM SIZE */}
+{showLargeModal && generatedImage && (
+  <div
+    className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
+    aria-modal="true"
+    role="dialog"
+  >
+    {/* Backdrop */}
+    <div
+      className="absolute inset-0 bg-black/70"
+      onClick={() => setShowLargeModal(false)}
+    />
+
+    {/* Modal Container */}
+    <div className="relative z-10 w-full max-w-[70vw] max-h-[80vh] flex flex-col items-center">
+      {/* Close Button */}
+      <button
+        onClick={() => setShowLargeModal(false)}
+        className="absolute -top-10 right-0 bg-card/90 backdrop-blur rounded-full p-2 hover:scale-105 transition"
+      >
+        <X className="w-5 h-5" />
+      </button>
+
+      {/* Modal Content */}
+      <div className="bg-card rounded-xl shadow-2xl p-4 w-full flex flex-col items-center">
+        {/* Header */}
+        <div className="flex items-center justify-between w-full mb-3">
+          <div className="text-sm text-muted-foreground">Preview</div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleDownloadOriginal} className="flex items-center gap-2">
+              <Download className="w-4 h-4" /> Original
+            </Button>
+            <Button size="sm" variant="ghost" onClick={handleDownload} className="flex items-center gap-2">
+              <Download className="w-4 h-4" /> Watermark
+            </Button>
+          </div>
+        </div>
+
+        {/* Medium-sized Image */}
+        <div className="flex items-center justify-center w-full">
+          <img
+            src={generatedImage}
+            alt="Large generated design"
+            className="object-contain max-w-[65vw] max-h-[65vh] rounded-md"
+            draggable={false}
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+
     </div>
   );
 };

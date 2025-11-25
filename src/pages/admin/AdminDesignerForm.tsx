@@ -31,6 +31,12 @@ const AdminDesignerForm = () => {
     women_only: false,
   });
 
+  const [authData, setAuthData] = useState({
+    email: "",
+    password: "",
+  });
+
+
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {

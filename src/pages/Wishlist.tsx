@@ -4,10 +4,15 @@ import { Button } from "@/components/ui/button";
 import { useWishlist } from "@/contexts/WishlistContext";
 import { useCart } from "@/contexts/CartContext";
 import { toast } from "sonner";
+import { useState } from "react";
+import { CartSidebar } from "@/components/CartSidebar";
+
+
 
 const Wishlist = () => {
   const { wishlist, removeFromWishlist } = useWishlist();
   const { addToCart, cartCount } = useCart();
+  const [cartOpen, setCartOpen] = useState(false);
 
   const handleAddToCart = (item: any) => {
     addToCart({
@@ -38,10 +43,14 @@ const Wishlist = () => {
               <button className="hover:text-accent transition-colors">
                 <Search className="w-5 h-5" />
               </button>
-              <button className="hover:text-accent transition-colors">
+              <Link to="/account" className="hover:text-accent transition-colors">
                 <User className="w-5 h-5" />
-              </button>
-              <button className="hover:text-accent transition-colors relative">
+              </Link>
+              <button
+                onClick={() => setCartOpen(true)}
+                className="p-2 rounded-md hover:bg-primary-foreground/6 relative"
+                aria-label="Open cart"
+              >
                 <ShoppingCart className="w-5 h-5" />
                 {cartCount > 0 && (
                   <span className="absolute -top-2 -right-2 bg-accent text-accent-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
@@ -128,6 +137,7 @@ const Wishlist = () => {
           </div>
         )}
       </div>
+      <CartSidebar open={cartOpen} onClose={() => setCartOpen(false)} />
     </div>
   );
 };

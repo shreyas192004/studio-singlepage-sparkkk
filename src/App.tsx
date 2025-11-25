@@ -27,6 +27,11 @@ import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import DesignerDetail from "./pages/DesignerDetail";
 import NotFound from "./pages/NotFound";
 import  {CheckoutPage } from "./pages/CheckOut";
+import TermsAndConditions from "./pages/TermsAndConditions";
+import ShippingAndRefundPolicy from "./pages/ShippingAndRefundPolicy";
+import DesignerDashboard from "./pages/designer/DesignerDashboard";
+import DesignerProducts from "./pages/designer/DesignerProducts";
+import DesignerAnalytics from "./pages/designer/DesignerAnalytics";
 
 const queryClient = new QueryClient();
 
@@ -52,6 +57,8 @@ const App = () => (
                   <Route path="/accessories" element={<Accessories />} />
                   <Route path="/sale" element={<Sale />} />
                   <Route path="/checkout" element={<CheckoutPage />} />
+                  <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
+                  <Route path="/shipping-and-refund-policy" element={<ShippingAndRefundPolicy />} />
                   
                   {/* Hidden Admin Routes */}
                   <Route path="/admintesora" element={<AdminLogin />} />
@@ -64,6 +71,11 @@ const App = () => (
                   <Route path="/admintesora/designers/:id/edit" element={<AdminDesignerForm />} />
                   <Route path="/admintesora/analytics" element={<AdminAnalytics />} />
                   <Route path="/designer/:id" element={<DesignerDetail />} />
+
+                  {/* Designer dashboard route */}
+                  <Route path="/designer/dashboard" element={<DesignerDashboard />} />
+                  <Route path="/designer/products" element={<DesignerProducts />} />
+                  <Route path="/designer/analytics" element={<DesignerAnalytics />} />
                   
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
