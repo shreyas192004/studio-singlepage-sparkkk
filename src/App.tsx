@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "./contexts/CartContext";
 import { WishlistProvider } from "./contexts/WishlistContext";
 import { AdminProvider } from "./contexts/AdminContext";
+import { DesignerProvider } from "./contexts/DesignerContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import Index from "./pages/Index";
 import ProductDetail from "./pages/ProductDetail";
@@ -29,6 +30,7 @@ import NotFound from "./pages/NotFound";
 import  {CheckoutPage } from "./pages/CheckOut";
 import TermsAndConditions from "./pages/TermsAndConditions";
 import ShippingAndRefundPolicy from "./pages/ShippingAndRefundPolicy";
+import DesignerLogin from "./pages/designer/DesignerLogin";
 import DesignerDashboard from "./pages/designer/DesignerDashboard";
 import DesignerProducts from "./pages/designer/DesignerProducts";
 import DesignerAnalytics from "./pages/designer/DesignerAnalytics";
@@ -40,8 +42,9 @@ const App = () => (
     <TooltipProvider>
       <AuthProvider>
         <AdminProvider>
-          <CartProvider>
-            <WishlistProvider>
+          <DesignerProvider>
+            <CartProvider>
+              <WishlistProvider>
               <Toaster />
               <Sonner />
               <BrowserRouter>
@@ -72,7 +75,8 @@ const App = () => (
                   <Route path="/admintesora/analytics" element={<AdminAnalytics />} />
                   <Route path="/designer/:id" element={<DesignerDetail />} />
 
-                  {/* Designer dashboard route */}
+                  {/* Designer routes */}
+                  <Route path="/designer/login" element={<DesignerLogin />} />
                   <Route path="/designer/dashboard" element={<DesignerDashboard />} />
                   <Route path="/designer/products" element={<DesignerProducts />} />
                   <Route path="/designer/analytics" element={<DesignerAnalytics />} />
@@ -81,8 +85,9 @@ const App = () => (
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </BrowserRouter>
-            </WishlistProvider>
-          </CartProvider>
+              </WishlistProvider>
+            </CartProvider>
+          </DesignerProvider>
         </AdminProvider>
       </AuthProvider>
     </TooltipProvider>
