@@ -52,7 +52,7 @@ serve(async (req) => {
 
     const { email, password, designer } = parsed.data;
 
-    // 1) Create auth user (Admin)
+    // 1) Create auth user (Admin) with auto-confirmed email
     const userRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
       method: "POST",
       headers: {
@@ -60,7 +60,11 @@ serve(async (req) => {
         apikey: SERVICE_ROLE,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ 
+        email, 
+        password,
+        email_confirm: true  // Auto-confirm email for admin-created designers
+      }),
     });
 
     const userBody = await userRes.text();
