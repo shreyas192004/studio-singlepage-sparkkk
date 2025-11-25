@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CreditCard } from 'lucide-react';
+import { ArrowLeft, CreditCard, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,12 +18,195 @@ export const CheckoutPage = () => {
     pincode: '',
     phone: '',
   });
+  const [orderPlaced, setOrderPlaced] = useState(false);
+  const [orderId, setOrderId] = useState('');
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
       ...formData,
       [e.target.id]: e.target.value,
     });
+  };
+
+  const generateInvoicePDF = (orderNumber: string) => {
+    const invoiceDate = new Date().toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+
+    let invoiceHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Invoice #${orderNumber}</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            color: #333;
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 20px;
+          }
+          .header h1 {
+            margin: 0;
+            font-size: 32px;
+          }
+          .header p {
+            margin: 5px 0;
+            color: #666;
+          }
+          .invoice-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+          }
+          .section {
+            margin-bottom: 20px;
+          }
+          .section h3 {
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #666;
+            text-transform: uppercase;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+          }
+          th {
+            background-color: #f5f5f5;
+            padding: 12px;
+            text-align: left;
+            border-bottom: 2px solid #ddd;
+            font-weight: 600;
+          }
+          td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+          }
+          .text-right {
+            text-align: right;
+          }
+          .totals {
+            margin-left: auto;
+            width: 300px;
+          }
+          .totals table {
+            margin-bottom: 0;
+          }
+          .totals td {
+            border: none;
+            padding: 8px 12px;
+          }
+          .total-row {
+            font-weight: bold;
+            font-size: 18px;
+            border-top: 2px solid #000 !important;
+          }
+          .footer {
+            margin-top: 50px;
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>INVOICE</h1>
+          <p>Order #${orderNumber}</p>
+          <p>Date: ${invoiceDate}</p>
+        </div>
+
+        <div class="invoice-info">
+          <div class="section">
+            <h3>Bill To:</h3>
+            <p><strong>${formData.name}</strong></p>
+            <p>${formData.address}</p>
+            <p>${formData.city}, ${formData.pincode}</p>
+            <p>Phone: ${formData.phone}</p>
+            <p>Email: ${formData.email}</p>
+          </div>
+          <div class="section">
+            <h3>Ship To:</h3>
+            <p><strong>${formData.name}</strong></p>
+            <p>${formData.address}</p>
+            <p>${formData.city}, ${formData.pincode}</p>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Details</th>
+              <th class="text-right">Quantity</th>
+              <th class="text-right">Price</th>
+              <th class="text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${cart.map(item => `
+              <tr>
+                <td>${item.name}</td>
+                <td>
+                  ${item.size ? `Size: ${item.size}<br>` : ''}
+                  ${item.color ? `Color: ${item.color}` : ''}
+                </td>
+                <td class="text-right">${item.quantity}</td>
+                <td class="text-right">Rs ${item.price.toFixed(2)}</td>
+                <td class="text-right">Rs ${(item.price * item.quantity).toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div class="totals">
+          <table>
+            <tr>
+              <td>Subtotal:</td>
+              <td class="text-right">Rs ${cartTotal.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td>Shipping:</td>
+              <td class="text-right">Free</td>
+            </tr>
+            <tr class="total-row">
+              <td>Total:</td>
+              <td class="text-right">Rs ${cartTotal.toFixed(2)}</td>
+            </tr>
+          </table>
+        </div>
+
+        <div class="footer">
+          <p>Thank you for your purchase!</p>
+          <p>If you have any questions about this invoice, please contact us.</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // Create a Blob from the HTML
+    const blob = new Blob([invoiceHTML], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    
+    // Create a temporary link and trigger download
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Invoice_${orderNumber}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handlePlaceOrder = (e: React.FormEvent) => {
@@ -35,20 +218,67 @@ export const CheckoutPage = () => {
       return;
     }
 
-    // Simulate order placement
-    alert(`Order placed successfully!\n\nOrder Details:\nName: ${formData.name}\nEmail: ${formData.email}\nTotal: Rs ${cartTotal.toFixed(2)}`);
-    
+    // Generate order ID
+    const newOrderId = `ORD${Date.now().toString().slice(-8)}`;
+    setOrderId(newOrderId);
+    setOrderPlaced(true);
+
+    // Auto-download invoice
+    setTimeout(() => {
+      generateInvoicePDF(newOrderId);
+    }, 500);
+  };
+
+  const handleContinue = () => {
     clearCart();
     navigate('/');
   };
 
-  // Redirect if cart is empty
-  if (cart.length === 0) {
+  // Redirect if cart is empty and order not placed
+  if (cart.length === 0 && !orderPlaced) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold mb-4">Your cart is empty</h2>
           <Button onClick={() => navigate('/')}>Continue Shopping</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Order success screen
+  if (orderPlaced) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="max-w-md w-full mx-4">
+          <div className="bg-card border rounded-lg p-8 text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Order Placed Successfully!</h2>
+            <p className="text-muted-foreground mb-4">Order ID: {orderId}</p>
+            <p className="text-sm text-muted-foreground mb-6">
+              Your invoice has been downloaded. A confirmation email has been sent to {formData.email}
+            </p>
+            <div className="space-y-3">
+              <Button
+                onClick={() => generateInvoicePDF(orderId)}
+                variant="outline"
+                className="w-full"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download Invoice Again
+              </Button>
+              <Button
+                onClick={handleContinue}
+                className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+              >
+                Continue Shopping
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     );
