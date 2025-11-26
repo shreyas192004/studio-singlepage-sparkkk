@@ -175,7 +175,7 @@ const DesignerProducts = () => {
                               <Eye className="h-4 w-4" />
                             )}
                           </Button>
-                          <Link to={`/admintesora/products/${product.id}/edit`}>
+                          <Link to={`/designer/products/${product.id}/edit`}>
                             <Button variant="ghost" size="icon">
                               <Edit className="h-4 w-4" />
                             </Button>

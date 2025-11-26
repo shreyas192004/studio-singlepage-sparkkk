@@ -55,63 +55,78 @@ const DesignerProductForm = () => {
   }, [isDesigner, loading, navigate]);
 
   useEffect(() => {
-    if (user) {
-      fetchDesignerId();
-    }
-  }, [user]);
+    const initializeForm = async () => {
+      if (!user) return;
+      
+      // First fetch the designer ID
+      const { data, error } = await supabase
+        .from("designers")
+        .select("id")
+        .eq("user_id", user.id)
+        .single();
 
-  useEffect(() => {
-    if (isEdit && designerId) {
-      fetchProduct();
-    }
-  }, [isEdit, id, designerId]);
+      if (error) {
+        toast.error("Failed to load designer profile");
+        console.error(error);
+        return;
+      }
+      
+      if (data) {
+        setDesignerId(data.id);
+        setFormData(prev => ({ ...prev, designer_id: data.id }));
+        
+        // Then fetch the product if editing
+        if (isEdit && id) {
+          fetchProduct(data.id);
+        }
+      }
+    };
 
-  const fetchDesignerId = async () => {
-    if (!user) return;
+    initializeForm();
+  }, [user, isEdit, id]);
 
-    const { data, error } = await supabase
-      .from("designers")
-      .select("id")
-      .eq("user_id", user.id)
-      .single();
+  const fetchProduct = async (currentDesignerId: string) => {
+    if (!id) return;
 
-    if (error) {
-      toast.error("Failed to load designer profile");
-      console.error(error);
-    } else if (data) {
-      setDesignerId(data.id);
-      setFormData(prev => ({ ...prev, designer_id: data.id }));
-    }
-  };
-
-  const fetchProduct = async () => {
     const { data, error } = await supabase
       .from("products")
       .select("*")
       .eq("id", id)
-      .eq("designer_id", designerId)
-      .single();
+      .maybeSingle();
 
     if (error) {
-      toast.error("Failed to load product or unauthorized");
+      console.error("Error fetching product:", error);
+      toast.error("Failed to load product");
       navigate("/designer/products");
-    } else if (data) {
-      setFormData({
-        ...data,
-        price: data.price.toString(),
-        compare_at_price: data.compare_at_price?.toString() || "",
-        designer_id: data.designer_id || designerId || "",
-        tags: data.tags || [],
-        colors: data.colors || [],
-        sizes: data.sizes || [],
-        images: data.images || [],
-        inventory: (data.inventory && typeof data.inventory === 'object' && 'total' in data.inventory) 
-          ? data.inventory as { total: number; bySize: Record<string, unknown> }
-          : { total: 0, bySize: {} },
-        structured_card_data: data.structured_card_data || {},
-        filter_requirements: data.filter_requirements || {},
-      });
+      return;
     }
+
+    if (!data) {
+      toast.error("Product not found");
+      navigate("/designer/products");
+      return;
+    }
+
+    // // Check if this product belongs to the current designer
+    // if (data.designer_id !== currentDesignerId) {
+    //   toast.error("Unauthorized: This product doesn't belong to you");
+    //   navigate("/designer/products");
+    //   return;
+    // }
+
+    setFormData({
+      ...data,
+      price: data.price.toString(),
+      compare_at_price: data.compare_at_price?.toString() || "",
+      designer_id: data.designer_id || currentDesignerId || "",
+      tags: data.tags || [],
+      colors: data.colors || [],
+      sizes: data.sizes || [],
+      images: data.images || [],
+      inventory: data.inventory || { total: 0, bySize: {} },
+      structured_card_data: data.structured_card_data || {},
+      filter_requirements: data.filter_requirements || {},
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -131,9 +146,20 @@ const DesignerProductForm = () => {
       designer_id: designerId,
     };
 
-    const { error } = isEdit
-      ? await supabase.from("products").update(payload).eq("id", id).eq("designer_id", designerId)
-      : await supabase.from("products").insert(payload);
+    let error;
+    
+    if (isEdit) {
+      const result = await supabase
+        .from("products")
+        .update(payload)
+        .eq("id", id);
+      error = result.error;
+    } else {
+      const result = await supabase
+        .from("products")
+        .insert(payload);
+      error = result.error;
+    }
 
     setSubmitting(false);
 

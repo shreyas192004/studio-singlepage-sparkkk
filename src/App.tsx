@@ -36,6 +36,7 @@ import DesignerDashboard from "./pages/designer/DesignerDashboard";
 import DesignerProducts from "./pages/designer/DesignerProducts";
 import DesignerAnalytics from "./pages/designer/DesignerAnalytics";
 import DesignerProductForm from "./pages/designer/DesignerProductForm";
+import DesignerOrders from "./pages/designer/DesignerOrders";
 
 const queryClient = new QueryClient();
 
@@ -83,6 +84,7 @@ const App = () => (
                   <Route path="/designer/dashboard" element={<DesignerDashboard />} />
                   <Route path="/designer/products" element={<DesignerProducts />} />
                   <Route path="/designer/analytics" element={<DesignerAnalytics />} />
+                  <Route path="/designer/orders" element={<DesignerOrders />} />
                 {/* For creating new products */}
                   <Route path="/designer/products/new" element={<DesignerProductForm />} />
 

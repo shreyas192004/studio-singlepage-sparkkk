@@ -4,10 +4,32 @@ import { useAdmin } from "@/contexts/AdminContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useDesigner } from "@/contexts/DesignerContext";
+
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Download, Eye, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -52,11 +74,26 @@ interface Order {
   invoice_url?: string | null;
 }
 
-const AdminOrders = () => {
-  const { isAdmin, loading: authLoading } = useAdmin();
+interface ProductSummary {
+  id: string;
+  title: string;
+  sku?: string;
+  price?: number;
+  currency?: string;
+  image?: string | null;
+  designer_id?: string | null;
+  designer?: string | null;
+  totalSold: number;
+  totalRevenue: number;
+}
+
+const DesignerOrders = () => {
+  const { isDesigner, loading: authLoading } = useDesigner();
   const navigate = useNavigate();
+
+  // Orders state
   const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // orders loading
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -64,6 +101,10 @@ const AdminOrders = () => {
   const [invoiceHtml, setInvoiceHtml] = useState<string | null>(null);
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const ordersPerPage = 10;
+
+  // Products summary state
+  const [productSummaries, setProductSummaries] = useState<ProductSummary[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
@@ -74,9 +115,12 @@ const AdminOrders = () => {
   useEffect(() => {
     if (isAdmin) {
       fetchOrders();
+      fetchProductsSummary();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
 
+  // ---------- Orders ----------
   const fetchOrders = async () => {
     try {
       setLoading(true);
@@ -120,10 +164,7 @@ const AdminOrders = () => {
 
   const downloadInvoice = async (orderNumber: string) => {
     try {
-      const { data, error } = await supabase.storage
-        .from("invoices")
-        .download(`${orderNumber}.html`);
-
+      const { data, error } = await supabase.storage.from("invoices").download(`${orderNumber}.html`);
       if (error) throw error;
 
       const url = window.URL.createObjectURL(data);
@@ -154,17 +195,12 @@ const AdminOrders = () => {
             return;
           }
         } catch (err) {
-          // fallback to storage
           console.warn("fetch invoice_url failed, falling back to storage:", err);
         }
       }
 
-      const { data, error } = await supabase.storage
-        .from("invoices")
-        .download(`${order.order_number}.html`);
-
+      const { data, error } = await supabase.storage.from("invoices").download(`${order.order_number}.html`);
       if (error) throw error;
-
       const text = await data.text();
       setInvoiceHtml(text);
     } catch (error: any) {
@@ -198,6 +234,84 @@ const AdminOrders = () => {
     refunded: "bg-gray-100 text-gray-800",
   };
 
+  // ---------- Products Summary ----------
+  const sumNumbers = (arr: number[]) => arr.reduce((a, b) => a + (b || 0), 0);
+
+  const fetchProductsSummary = async () => {
+    try {
+      setProductsLoading(true);
+
+      // 1) fetch products (adjust selected fields for your schema)
+      const { data: productsData, error: productsError } = await supabase
+        .from("products")
+        .select("id, title, sku, price, currency, images, designer_profile_id")
+        .order("created_at", { ascending: false });
+
+      if (productsError) throw productsError;
+      const products = productsData || [];
+
+      // 2) fetch designers for products (single query)
+      const designerIds = Array.from(
+        new Set(products.map((p: any) => p.designer_profile_id).filter(Boolean))
+      ) as string[];
+
+      let designersMap: Record<string, any> = {};
+      if (designerIds.length > 0) {
+        const { data: designersData, error: designersError } = await supabase
+          .from("designers")
+          .select("id, name, user_id")
+          .in("id", designerIds);
+        if (!designersError && designersData) {
+          designersMap = designersData.reduce((acc: any, d: any) => {
+            acc[d.id] = d;
+            return acc;
+          }, {});
+        }
+      }
+
+      // 3) aggregate order_items per product
+      // NOTE: This does N queries (one per product). For large product sets consider using aggregated SQL (recommended).
+      const summaries: ProductSummary[] = await Promise.all(
+        products.map(async (p: any) => {
+          const { data: itemsData, error: itemsError } = await supabase
+            .from("order_items")
+            .select("quantity, total_price")
+            .eq("product_id", p.id);
+
+          if (itemsError) {
+            console.warn("order_items fetch error for product", p.id, itemsError);
+          }
+
+          const items = itemsData || [];
+          const totalSold = sumNumbers(items.map((it: any) => Number(it.quantity || 0)));
+          const totalRevenue = sumNumbers(items.map((it: any) => Number(it.total_price || 0)));
+
+          return {
+            id: p.id,
+            title: p.title,
+            sku: p.sku,
+            price: p.price,
+            currency: p.currency,
+            image: Array.isArray(p.images) ? p.images[0] : p.images || null,
+            designer_id: p.designer_profile_id ?? null,
+            designer: designersMap[p.designer_profile_id]?.name ?? "Unknown",
+            totalSold,
+            totalRevenue,
+          };
+        })
+      );
+
+      setProductSummaries(summaries);
+    } catch (err: any) {
+      console.error("fetchProductsSummary error:", err);
+      toast.error("Failed to fetch product summaries: " + (err.message || String(err)));
+      setProductSummaries([]);
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
+  // ---------- render ----------
   if (authLoading || loading) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
@@ -214,12 +328,72 @@ const AdminOrders = () => {
             <Button variant="ghost" onClick={() => navigate("/admintesora/dashboard")}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <h1 className="text-2xl font-bold">Orders Management</h1>
+            <h1 className="text-2xl font-bold">Orders & Products Management</h1>
           </div>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8">
+        {/* --- Products Summary --- */}
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold mb-4">Designer Products Summary</h2>
+
+          {productsLoading ? (
+            <div className="py-8 text-center">Loading products...</div>
+          ) : productSummaries.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground">No products found</div>
+          ) : (
+            <div className="border rounded-lg overflow-hidden mb-6">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead>Total Sold</TableHead>
+                    <TableHead>Total Revenue</TableHead>
+                    <TableHead>Designer</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {productSummaries.map((p) => (
+                    <TableRow key={p.id} className="hover:bg-muted/50">
+                      <TableCell className="flex items-center gap-3">
+                        {p.image ? (
+                          <img src={p.image} alt={p.title} className="w-12 h-12 object-cover rounded" />
+                        ) : (
+                          <div className="w-12 h-12 bg-muted rounded flex items-center justify-center text-sm">N/A</div>
+                        )}
+                        <div>
+                          <div className="font-medium">{p.title}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>{p.sku || "—"}</TableCell>
+                      <TableCell>{p.currency} {p.price}</TableCell>
+                      <TableCell>{p.totalSold}</TableCell>
+                      <TableCell>₹{(p.totalRevenue || 0).toFixed(2)}</TableCell>
+                      <TableCell>{p.designer}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigate(`/admintesora/products/${p.id}`)}
+                          >
+                            View
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
+
+        {/* --- Orders Controls --- */}
         <div className="flex flex-col md:flex-row gap-4 mb-6">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -247,6 +421,7 @@ const AdminOrders = () => {
           </Select>
         </div>
 
+        {/* --- Orders Table --- */}
         <div className="border rounded-lg overflow-hidden">
           <Table>
             <TableHeader>
@@ -303,11 +478,7 @@ const AdminOrders = () => {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedOrder(order)}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setSelectedOrder(order)}>
                       View Details
                     </Button>
                   </TableCell>
@@ -317,6 +488,7 @@ const AdminOrders = () => {
           </Table>
         </div>
 
+        {/* --- Pagination --- */}
         {totalPages > 1 && (
           <div className="mt-6">
             <Pagination>
@@ -350,6 +522,7 @@ const AdminOrders = () => {
         )}
       </main>
 
+      {/* Order Details Dialog */}
       <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -466,4 +639,4 @@ const AdminOrders = () => {
   );
 };
 
-export default AdminOrders;
+export default DesignerOrders;
