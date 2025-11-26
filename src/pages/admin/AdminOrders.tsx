@@ -117,6 +117,17 @@ const AdminOrders = () => {
 
   const getInvoiceUrl = async (orderNumber: string): Promise<string | null> => {
     try {
+      // Check if file exists first
+      const { data: fileData, error } = await supabase.storage
+        .from("product-images")
+        .list("invoices", {
+          search: `${orderNumber}.pdf`
+        });
+
+      if (error || !fileData || fileData.length === 0) {
+        return null;
+      }
+
       const { data } = supabase.storage
         .from("product-images")
         .getPublicUrl(`invoices/${orderNumber}.pdf`);
@@ -343,15 +354,20 @@ const AdminOrders = () => {
                 </div>
                 <div>
                   <h3 className="font-semibold mb-2">Shipping Address</h3>
-                  {selectedOrder.shipping_address && (
-                    <div className="text-sm">
-                      <p>{selectedOrder.shipping_address.full_name}</p>
-                      <p>{selectedOrder.shipping_address.phone}</p>
+                  {selectedOrder.shipping_address ? (
+                    <div className="text-sm space-y-1">
+                      <p className="font-medium">{selectedOrder.shipping_address.full_name}</p>
+                      <p className="text-muted-foreground">{selectedOrder.shipping_address.phone}</p>
                       <p>{selectedOrder.shipping_address.address_line1}</p>
-                      {selectedOrder.shipping_address.address_line2 && <p>{selectedOrder.shipping_address.address_line2}</p>}
+                      {selectedOrder.shipping_address.address_line2 && (
+                        <p>{selectedOrder.shipping_address.address_line2}</p>
+                      )}
                       <p>{selectedOrder.shipping_address.city}, {selectedOrder.shipping_address.state}</p>
-                      <p>{selectedOrder.shipping_address.postal_code}, {selectedOrder.shipping_address.country}</p>
+                      <p>{selectedOrder.shipping_address.postal_code}</p>
+                      <p className="font-medium">{selectedOrder.shipping_address.country}</p>
                     </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No shipping address available</p>
                   )}
                 </div>
               </div>
