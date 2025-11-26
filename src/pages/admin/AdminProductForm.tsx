@@ -92,24 +92,39 @@ const AdminProductForm = () => {
     e.preventDefault();
     setSubmitting(true);
 
-    const payload = {
-      ...formData,
-      price: parseFloat(formData.price),
-      compare_at_price: formData.compare_at_price ? parseFloat(formData.compare_at_price) : null,
-      designer_id: formData.designer_id || null,
-    };
+    try {
+      // Verify admin role before submitting
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("You must be logged in to create products");
+        setSubmitting(false);
+        return;
+      }
 
-    const { error } = isEdit
-      ? await (supabase as any).from("products").update(payload).eq("id", id)
-      : await (supabase as any).from("products").insert(payload);
+      const payload = {
+        ...formData,
+        price: parseFloat(formData.price),
+        compare_at_price: formData.compare_at_price ? parseFloat(formData.compare_at_price) : null,
+        designer_id: formData.designer_id || null,
+      };
 
-    setSubmitting(false);
+      const { error, data } = isEdit
+        ? await (supabase as any).from("products").update(payload).eq("id", id).select()
+        : await (supabase as any).from("products").insert(payload).select();
 
-    if (error) {
-      toast.error(`Failed to ${isEdit ? "update" : "create"} product`);
-    } else {
-      toast.success(`Product ${isEdit ? "updated" : "created"} successfully`);
-      navigate("/admintesora/products");
+      setSubmitting(false);
+
+      if (error) {
+        console.error("Product creation error:", error);
+        toast.error(`Failed to ${isEdit ? "update" : "create"} product: ${error.message}`);
+      } else {
+        toast.success(`Product ${isEdit ? "updated" : "created"} successfully`);
+        navigate("/admintesora/products");
+      }
+    } catch (err) {
+      console.error("Unexpected error:", err);
+      toast.error("An unexpected error occurred");
+      setSubmitting(false);
     }
   };
 
