@@ -87,7 +87,7 @@ const DesignerDashboard = () => {
             </Card>
           </Link>
 
-          <Link to="/admintesora/analytics">
+          <Link to="/designer/payments">
             <Card className="hover:shadow-lg transition-shadow cursor-pointer">
               <CardHeader>
                 <BarChart3 className="h-8 w-8 mb-2 text-primary" />
