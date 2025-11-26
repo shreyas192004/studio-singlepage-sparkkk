@@ -85,7 +85,44 @@ export const CheckoutPage = () => {
       // Generate order number
       const newOrderId = `ORD${Date.now().toString().slice(-8)}`;
 
-      // Insert order into database
+      // First, create shipping address
+      const { data: addressData, error: addressError } = await supabase
+        .from('addresses')
+        .insert({
+          user_id: user!.id,
+          address_type: 'shipping',
+          full_name: formData.name,
+          phone: formData.phone,
+          address_line1: formData.address,
+          city: formData.city,
+          state: formData.city, // Using city as state for now
+          postal_code: formData.pincode,
+          country: 'India',
+        })
+        .select()
+        .single();
+
+      if (addressError) throw addressError;
+
+      // Generate and upload invoice to storage
+      const invoiceHTML = generateInvoiceHTML(newOrderId);
+      const blob = new Blob([invoiceHTML], { type: 'text/html' });
+      
+      const { error: uploadError } = await supabase.storage
+        .from('invoices')
+        .upload(`${newOrderId}.html`, blob, {
+          contentType: 'text/html',
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL for the invoice
+      const { data: urlData } = supabase.storage
+        .from('invoices')
+        .getPublicUrl(`${newOrderId}.html`);
+
+      // Insert order into database with invoice URL and address
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -95,6 +132,9 @@ export const CheckoutPage = () => {
           status: 'pending',
           payment_status: 'pending',
           payment_method: 'cash_on_delivery',
+          shipping_address_id: addressData.id,
+          billing_address_id: addressData.id,
+          invoice_url: urlData.publicUrl,
         })
         .select()
         .single();
@@ -119,19 +159,6 @@ export const CheckoutPage = () => {
         .insert(orderItems);
 
       if (itemsError) throw itemsError;
-
-      // Generate and upload invoice to storage
-      const invoiceHTML = generateInvoiceHTML(newOrderId);
-      const blob = new Blob([invoiceHTML], { type: 'text/html' });
-      
-      const { error: uploadError } = await supabase.storage
-        .from('product-images')
-        .upload(`invoices/${newOrderId}.html`, blob, {
-          contentType: 'text/html',
-          upsert: true,
-        });
-
-      if (uploadError) throw uploadError;
 
       // Set order as placed
       setOrderId(newOrderId);
