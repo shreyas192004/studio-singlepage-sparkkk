@@ -95,14 +95,12 @@ const AdminOrders = () => {
               : Promise.resolve({ data: null }),
           ]);
 
-          const invoiceUrl = await getInvoiceUrl(order.order_number);
-
           return {
             ...order,
             order_items: itemsResult.data || [],
             shipping_address: shippingResult.data,
             billing_address: billingResult.data,
-            invoice_url: invoiceUrl,
+            invoice_url: order.invoice_url,
           };
         })
       );
@@ -115,40 +113,19 @@ const AdminOrders = () => {
     }
   };
 
-  const getInvoiceUrl = async (orderNumber: string): Promise<string | null> => {
-    try {
-      // Check if file exists first
-      const { data: fileData, error } = await supabase.storage
-        .from("product-images")
-        .list("invoices", {
-          search: `${orderNumber}.pdf`
-        });
-
-      if (error || !fileData || fileData.length === 0) {
-        return null;
-      }
-
-      const { data } = supabase.storage
-        .from("product-images")
-        .getPublicUrl(`invoices/${orderNumber}.pdf`);
-      return data.publicUrl;
-    } catch {
-      return null;
-    }
-  };
 
   const downloadInvoice = async (orderNumber: string) => {
     try {
       const { data, error } = await supabase.storage
-        .from("product-images")
-        .download(`invoices/${orderNumber}.pdf`);
+        .from("invoices")
+        .download(`${orderNumber}.html`);
 
       if (error) throw error;
 
       const url = window.URL.createObjectURL(data);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `invoice-${orderNumber}.pdf`;
+      a.download = `invoice-${orderNumber}.html`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
