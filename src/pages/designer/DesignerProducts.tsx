@@ -37,17 +37,50 @@ const DesignerProducts = () => {
   }, [isDesigner]);
 
   const fetchProducts = async () => {
-    const { data, error } = await (supabase as any)
-      .from("products")
-      .select("*")
-      .order("created_at", { ascending: false });
+    try {
+      // Get the designer's ID first
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("User not authenticated");
+        setIsLoading(false);
+        return;
+      }
 
-    if (error) {
-      toast.error("Failed to load products");
-    } else {
-      setProducts(data || []);
+      const { data: designerData, error: designerError } = await supabase
+        .from("designers")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (designerError) {
+        toast.error("Failed to get designer profile");
+        setIsLoading(false);
+        return;
+      }
+
+      if (!designerData) {
+        toast.error("Designer profile not found");
+        setIsLoading(false);
+        return;
+      }
+
+      // Fetch only products belonging to this designer
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .eq("designer_id", designerData.id)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        toast.error("Failed to load products");
+      } else {
+        setProducts(data || []);
+      }
+    } catch (err: any) {
+      toast.error("Error loading products: " + (err.message || String(err)));
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const handleDelete = async (id: string) => {
