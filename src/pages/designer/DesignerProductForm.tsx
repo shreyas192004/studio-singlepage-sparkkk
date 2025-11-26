@@ -105,7 +105,9 @@ const DesignerProductForm = () => {
         colors: data.colors || [],
         sizes: data.sizes || [],
         images: data.images || [],
-        inventory: data.inventory || { total: 0, bySize: {} },
+        inventory: (data.inventory && typeof data.inventory === 'object' && 'total' in data.inventory) 
+          ? data.inventory as { total: number; bySize: Record<string, unknown> }
+          : { total: 0, bySize: {} },
         structured_card_data: data.structured_card_data || {},
         filter_requirements: data.filter_requirements || {},
       });
