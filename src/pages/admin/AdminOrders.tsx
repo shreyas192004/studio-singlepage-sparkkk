@@ -24,6 +24,7 @@ interface OrderItem {
 }
 
 interface Address {
+  id?: string;
   full_name: string;
   phone: string;
   address_line1: string;
@@ -37,16 +38,18 @@ interface Address {
 interface Order {
   id: string;
   order_number: string;
-  user_id: string;
+  user_id?: string;
   status: string;
   total_amount: number;
   created_at: string;
-  payment_status: string;
-  payment_method: string | null;
-  shipping_address: Address | null;
-  billing_address: Address | null;
+  payment_status?: string;
+  payment_method?: string | null;
+  shipping_address?: Address | null;
+  billing_address?: Address | null;
+  shipping_address_id?: string | null;
+  billing_address_id?: string | null;
   order_items: OrderItem[];
-  invoice_url: string | null;
+  invoice_url?: string | null;
 }
 
 const AdminOrders = () => {
@@ -58,6 +61,8 @@ const AdminOrders = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [invoiceHtml, setInvoiceHtml] = useState<string | null>(null);
+  const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const ordersPerPage = 10;
 
   useEffect(() => {
@@ -75,7 +80,7 @@ const AdminOrders = () => {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      
+
       const { data: ordersData, error: ordersError } = await supabase
         .from("orders")
         .select("*")
@@ -84,7 +89,7 @@ const AdminOrders = () => {
       if (ordersError) throw ordersError;
 
       const ordersWithDetails = await Promise.all(
-        (ordersData || []).map(async (order) => {
+        (ordersData || []).map(async (order: any) => {
           const [itemsResult, shippingResult, billingResult] = await Promise.all([
             supabase.from("order_items").select("*").eq("order_id", order.id),
             order.shipping_address_id
@@ -100,19 +105,18 @@ const AdminOrders = () => {
             order_items: itemsResult.data || [],
             shipping_address: shippingResult.data,
             billing_address: billingResult.data,
-            invoice_url: order.invoice_url,
-          };
+            invoice_url: order.invoice_url ?? null,
+          } as Order;
         })
       );
 
       setOrders(ordersWithDetails);
     } catch (error: any) {
-      toast.error("Failed to fetch orders: " + error.message);
+      toast.error("Failed to fetch orders: " + (error.message || String(error)));
     } finally {
       setLoading(false);
     }
   };
-
 
   const downloadInvoice = async (orderNumber: string) => {
     try {
@@ -132,15 +136,48 @@ const AdminOrders = () => {
       document.body.removeChild(a);
       toast.success("Invoice downloaded successfully");
     } catch (error: any) {
-      toast.error("Failed to download invoice: " + error.message);
+      toast.error("Failed to download invoice: " + (error.message || String(error)));
+    }
+  };
+
+  const openInvoiceInModal = async (order: Order) => {
+    try {
+      setInvoiceHtml(null);
+      setInvoiceModalOpen(true);
+
+      if (order.invoice_url) {
+        try {
+          const resp = await fetch(order.invoice_url);
+          if (resp.ok) {
+            const text = await resp.text();
+            setInvoiceHtml(text);
+            return;
+          }
+        } catch (err) {
+          // fallback to storage
+          console.warn("fetch invoice_url failed, falling back to storage:", err);
+        }
+      }
+
+      const { data, error } = await supabase.storage
+        .from("invoices")
+        .download(`${order.order_number}.html`);
+
+      if (error) throw error;
+
+      const text = await data.text();
+      setInvoiceHtml(text);
+    } catch (error: any) {
+      toast.error("Failed to load invoice: " + (error.message || String(error)));
+      setInvoiceModalOpen(false);
     }
   };
 
   const filteredOrders = orders.filter((order) => {
     const matchesSearch =
-      order.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.shipping_address?.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.shipping_address?.phone.includes(searchQuery);
+      order.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.shipping_address?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.shipping_address?.phone?.includes(searchQuery);
 
     const matchesStatus = statusFilter === "all" || order.status === statusFilter;
 
@@ -226,12 +263,12 @@ const AdminOrders = () => {
             </TableHeader>
             <TableBody>
               {paginatedOrders.map((order) => (
-                <TableRow key={order.id} className="cursor-pointer hover:bg-muted/50">
+                <TableRow key={order.id} className="hover:bg-muted/50">
                   <TableCell className="font-medium">{order.order_number}</TableCell>
                   <TableCell>{order.shipping_address?.full_name || "N/A"}</TableCell>
                   <TableCell>{order.shipping_address?.phone || "N/A"}</TableCell>
-                  <TableCell>{order.order_items.length} item(s)</TableCell>
-                  <TableCell>₹{order.total_amount.toFixed(2)}</TableCell>
+                  <TableCell>{order.order_items?.length || 0} item(s)</TableCell>
+                  <TableCell>₹{(order.total_amount || 0).toFixed(2)}</TableCell>
                   <TableCell>
                     <Badge className={statusColors[order.status] || "bg-gray-100"}>
                       {order.status}
@@ -246,7 +283,7 @@ const AdminOrders = () => {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              window.open(order.invoice_url!, "_blank");
+                              openInvoiceInModal(order);
                             }}
                           >
                             <Eye className="h-4 w-4" />
@@ -323,10 +360,12 @@ const AdminOrders = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <h3 className="font-semibold mb-2">Order Information</h3>
-                  <p className="text-sm">Status: <Badge className={statusColors[selectedOrder.status]}>{selectedOrder.status}</Badge></p>
-                  <p className="text-sm">Payment: {selectedOrder.payment_status}</p>
+                  <p className="text-sm">
+                    Status: <Badge className={statusColors[selectedOrder.status]}>{selectedOrder.status}</Badge>
+                  </p>
+                  <p className="text-sm">Payment: {selectedOrder.payment_status || "N/A"}</p>
                   <p className="text-sm">Method: {selectedOrder.payment_method || "N/A"}</p>
-                  <p className="text-sm">Total: ₹{selectedOrder.total_amount.toFixed(2)}</p>
+                  <p className="text-sm">Total: ₹{(selectedOrder.total_amount || 0).toFixed(2)}</p>
                   <p className="text-sm">Date: {new Date(selectedOrder.created_at).toLocaleDateString()}</p>
                 </div>
                 <div>
@@ -373,6 +412,54 @@ const AdminOrders = () => {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Invoice Modal */}
+      <Dialog
+        open={invoiceModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setInvoiceModalOpen(false);
+            setInvoiceHtml(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Invoice Preview</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {!invoiceHtml && (
+              <div className="min-h-[200px] flex items-center justify-center">
+                Loading invoice...
+              </div>
+            )}
+
+            {invoiceHtml && (
+              <div className="w-full h-[70vh]">
+                <iframe
+                  title="Invoice Preview"
+                  srcDoc={invoiceHtml}
+                  className="w-full h-full border rounded"
+                  sandbox=""
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setInvoiceModalOpen(false);
+                  setInvoiceHtml(null);
+                }}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -10,6 +10,14 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { CartSidebar } from "@/components/CartSidebar";
 
+interface Review {
+  id: string;
+  name: string;
+  rating: number; // 1-5
+  date: string; // ISO
+  comment: string;
+}
+
 const ProductDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -24,9 +32,87 @@ const ProductDetail = () => {
   const [selectedColor, setSelectedColor] = useState("");
   const [quantity, setQuantity] = useState(1);
 
+  // Live viewer count (4-12)
+  const [viewers, setViewers] = useState<number>(() => Math.floor(Math.random() * 9) + 4); // 4..12
+
   // Bulk modal state (company details)
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [bulkModalProduct, setBulkModalProduct] = useState<any | null>(null);
+
+  // Dummy reviews (Indian names) — placed locally
+  const [reviews] = useState<Review[]>([
+    {
+      id: "r1",
+      name: "Aarav Shah",
+      rating: 5,
+      date: "2025-11-05",
+      comment: "Fantastic product — great build quality and fast delivery. Highly recommended!",
+    },
+    {
+      id: "r2",
+      name: "Priya Menon",
+      rating: 4,
+      date: "2025-10-28",
+      comment: "Very good, fits well. Colour was slightly different than photo but overall satisfied.",
+    },
+    {
+      id: "r3",
+      name: "Rahul Verma",
+      rating: 5,
+      date: "2025-09-14",
+      comment: "Excellent value for money. Will buy again for gifts.",
+    },
+    {
+      id: "r4",
+      name: "Sneha Kulkarni",
+      rating: 3,
+      date: "2025-08-21",
+      comment: "Decent product but packaging was torn when it arrived. Support resolved quickly.",
+    },
+    {
+      id: "r5",
+      name: "Karan Patel",
+      rating: 4,
+      date: "2025-07-11",
+      comment: "Comfortable and stylish. Took two washes and still looks new.",
+    },
+    {
+      id: "r6",
+      name: "Isha Reddy",
+      rating: 5,
+      date: "2025-06-02",
+      comment: "Lovely fabric and stitching. The size chart is accurate.",
+    },
+  ]);
+
+  useEffect(() => {
+    // Inject CSS for subtle fade animation if not already present
+    const id = "product-viewers-animate-css";
+    if (!document.getElementById(id)) {
+      const style = document.createElement("style");
+      style.id = id;
+      style.innerHTML = `
+        @keyframes pv-fade { from { opacity: 0.7; transform: translateY(0); } to { opacity: 1; transform: translateY(-2px); } }
+        .pv-animate { animation: pv-fade 1.2s ease-in-out infinite alternate; }
+      `;
+      document.head.appendChild(style);
+    }
+
+    // Start viewer count loop (random 20-30s)
+    let timeoutId: number;
+    const tick = () => {
+      const next = Math.floor(Math.random() * 9) + 4; // 4..12
+      setViewers(next);
+      const delay = Math.floor(Math.random() * 10000) + 20000; // 20000..30000ms
+      timeoutId = window.setTimeout(tick, delay);
+    };
+
+    // small initial jitter
+    timeoutId = window.setTimeout(tick, Math.floor(Math.random() * 3000) + 1500);
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, []);
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -102,19 +188,15 @@ const ProductDetail = () => {
     if (!bulkModalProduct) return;
     const payload = {
       productId: bulkModalProduct.id,
-      // include intended quantity so sales knows the requirement
       requestedQuantity: quantity,
     };
     closeBulkModal();
-    // If you want to keep the cart open or not, adjust behavior — here we close it and navigate
     setCartOpen(false);
     navigate("/bulk", { state: payload });
   };
 
-  // Increase quantity but enforce max 9. If attempt to exceed, open bulk modal.
   const handleIncreaseQuantity = () => {
     if (quantity >= 9) {
-      // show bulk modal for product
       openBulkModal(product);
       return;
     }
@@ -134,14 +216,11 @@ const ProductDetail = () => {
       toast.error("Please select a color");
       return;
     }
-
-    // If quantity > 9 (shouldn't happen because UI restricts), prompt bulk modal
     if (quantity > 9) {
       openBulkModal(product);
       return;
     }
 
-    // Add to cart with selected quantity
     addToCart({
       id: product.id,
       name: product.title,
@@ -153,7 +232,6 @@ const ProductDetail = () => {
     });
 
     toast.success(`Added ${product.title} x${quantity} to cart!`);
-    // Optionally open cart sidebar
     setCartOpen(true);
   };
 
@@ -167,6 +245,23 @@ const ProductDetail = () => {
       tag: product.tags?.[0] || "",
     });
     toast.success(isInWishlist(product.id) ? "Removed from wishlist" : "Added to wishlist");
+  };
+
+  // Reviews helpers
+  const averageRating = () => {
+    if (!reviews.length) return 0;
+    return +(reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1);
+  };
+
+  const renderStars = (rating: number) => {
+    const full = "★".repeat(rating);
+    const empty = "☆".repeat(5 - rating);
+    return (
+      <span className="text-yellow-500" aria-hidden>
+        {full}
+        {empty}
+      </span>
+    );
   };
 
   return (
@@ -248,10 +343,21 @@ const ProductDetail = () => {
                 <span className="text-3xl font-bold">
                   {product.currency || "INR"} {product.price}
                 </span>
+
                 {product.compare_at_price && (
                   <span className="text-xl text-muted-foreground line-through">{product.compare_at_price}</span>
                 )}
               </div>
+
+              {/* Live viewers (4-12) */}
+              <div className="mt-2">
+                <div
+                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-100 text-orange-700 text-sm font-medium pv-animate pv-animate"
+                >
+                  🔥 {viewers} people are viewing this product right now
+                </div>
+              </div>
+
               {product.tags && product.tags.length > 0 && (
                 <span className="inline-block mt-3 px-3 py-1 text-sm font-semibold rounded-full bg-accent text-accent-foreground">
                   {product.tags[0]}
@@ -260,6 +366,24 @@ const ProductDetail = () => {
             </div>
 
             <p className="text-muted-foreground leading-relaxed">{product.description}</p>
+
+            {/* Reviews summary */}
+            <div className="pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-2xl font-bold">{averageRating()}</div>
+                    <div className="text-sm text-muted-foreground">{renderStars(Math.round(averageRating()))}</div>
+                  </div>
+                  <div className="text-sm text-muted-foreground">{reviews.length} reviews</div>
+                </div>
+                <div>
+                  <Button variant="ghost" onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })}>
+                    Read all reviews
+                  </Button>
+                </div>
+              </div>
+            </div>
 
             {/* Size Selection */}
             {product.sizes && product.sizes.length > 0 && (
@@ -334,6 +458,27 @@ const ProductDetail = () => {
                 <Heart className={`w-5 h-5 ${isInWishlist(product.id) ? "fill-current text-red-500" : ""}`} />
               </Button>
             </div>
+          </div>
+        </div>
+
+        {/* Reviews list */}
+        <div className="mt-12">
+          <h2 className="text-2xl font-bold mb-4">Customer Reviews</h2>
+          <div className="space-y-4">
+            {reviews.map((r) => (
+              <div key={r.id} className="p-4 border rounded-lg">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <div className="font-semibold">{r.name}</div>
+                      <div className="text-sm text-muted-foreground">{new Date(r.date).toLocaleDateString()}</div>
+                    </div>
+                    <div className="mt-2">{renderStars(r.rating)} <span className="text-sm text-muted-foreground ml-2">{r.rating}/5</span></div>
+                  </div>
+                </div>
+                <p className="mt-3 text-sm text-muted-foreground">{r.comment}</p>
+              </div>
+            ))}
           </div>
         </div>
 
