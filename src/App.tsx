@@ -35,6 +35,7 @@ import DesignerLogin from "./pages/designer/DesignerLogin";
 import DesignerDashboard from "./pages/designer/DesignerDashboard";
 import DesignerProducts from "./pages/designer/DesignerProducts";
 import DesignerAnalytics from "./pages/designer/DesignerAnalytics";
+import DesignerProductForm from "./pages/designer/DesignerProductForm";
 
 const queryClient = new QueryClient();
 
@@ -82,6 +83,11 @@ const App = () => (
                   <Route path="/designer/dashboard" element={<DesignerDashboard />} />
                   <Route path="/designer/products" element={<DesignerProducts />} />
                   <Route path="/designer/analytics" element={<DesignerAnalytics />} />
+                {/* For creating new products */}
+                  <Route path="/designer/products/new" element={<DesignerProductForm />} />
+
+                  {/* For editing existing products */}
+                  <Route path="/designer/products/:id/edit" element={<DesignerProductForm />} />
                   
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />

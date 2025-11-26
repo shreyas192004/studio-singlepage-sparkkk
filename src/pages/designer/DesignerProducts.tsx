@@ -101,7 +101,7 @@ const DesignerProducts = () => {
                   Dashboard
                 </Button>
               </Link>
-              <Link to="/admintesora/products/new">
+              <Link to="/designer/products/new">
                 <Button>
                   <Plus className="mr-2 h-4 w-4" />
                   Add Product
