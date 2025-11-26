@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAdmin } from "@/contexts/AdminContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -105,20 +104,40 @@ const DesignerOrders = () => {
   // Products summary state
   const [productSummaries, setProductSummaries] = useState<ProductSummary[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
+  const [designerId, setDesignerId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authLoading && !isAdmin) {
-      navigate("/admintesora");
+    if (!authLoading && !isDesigner) {
+      navigate("/designer/login");
     }
-  }, [isAdmin, authLoading, navigate]);
+  }, [isDesigner, authLoading, navigate]);
 
   useEffect(() => {
-    if (isAdmin) {
-      fetchOrders();
-      fetchProductsSummary();
+    if (isDesigner) {
+      fetchDesignerId();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin]);
+  }, [isDesigner]);
+
+  const fetchDesignerId = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: designerData, error } = await supabase
+        .from("designers")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (!error && designerData) {
+        setDesignerId(designerData.id);
+        fetchProductsSummary(designerData.id);
+      }
+    } catch (err) {
+      console.error("Error fetching designer ID:", err);
+    }
+  };
 
   // ---------- Orders ----------
   const fetchOrders = async () => {
@@ -237,40 +256,21 @@ const DesignerOrders = () => {
   // ---------- Products Summary ----------
   const sumNumbers = (arr: number[]) => arr.reduce((a, b) => a + (b || 0), 0);
 
-  const fetchProductsSummary = async () => {
+  const fetchProductsSummary = async (designerId: string) => {
     try {
       setProductsLoading(true);
 
-      // 1) fetch products (adjust selected fields for your schema)
+      // Fetch only products belonging to this designer
       const { data: productsData, error: productsError } = await supabase
         .from("products")
-        .select("id, title, sku, price, currency, images, designer_profile_id")
+        .select("id, title, sku, price, currency, images, designer_id")
+        .eq("designer_id", designerId)
         .order("created_at", { ascending: false });
 
       if (productsError) throw productsError;
       const products = productsData || [];
 
-      // 2) fetch designers for products (single query)
-      const designerIds = Array.from(
-        new Set(products.map((p: any) => p.designer_profile_id).filter(Boolean))
-      ) as string[];
-
-      let designersMap: Record<string, any> = {};
-      if (designerIds.length > 0) {
-        const { data: designersData, error: designersError } = await supabase
-          .from("designers")
-          .select("id, name, user_id")
-          .in("id", designerIds);
-        if (!designersError && designersData) {
-          designersMap = designersData.reduce((acc: any, d: any) => {
-            acc[d.id] = d;
-            return acc;
-          }, {});
-        }
-      }
-
-      // 3) aggregate order_items per product
-      // NOTE: This does N queries (one per product). For large product sets consider using aggregated SQL (recommended).
+      // Aggregate order_items per product
       const summaries: ProductSummary[] = await Promise.all(
         products.map(async (p: any) => {
           const { data: itemsData, error: itemsError } = await supabase
@@ -293,8 +293,8 @@ const DesignerOrders = () => {
             price: p.price,
             currency: p.currency,
             image: Array.isArray(p.images) ? p.images[0] : p.images || null,
-            designer_id: p.designer_profile_id ?? null,
-            designer: designersMap[p.designer_profile_id]?.name ?? "Unknown",
+            designer_id: p.designer_id ?? null,
+            designer: null,
             totalSold,
             totalRevenue,
           };
@@ -312,11 +312,11 @@ const DesignerOrders = () => {
   };
 
   // ---------- render ----------
-  if (authLoading || loading) {
+  if (authLoading || productsLoading) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
-  if (!isAdmin) {
+  if (!isDesigner) {
     return null;
   }
 
@@ -325,10 +325,10 @@ const DesignerOrders = () => {
       <header className="border-b">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" onClick={() => navigate("/admintesora/dashboard")}>
+            <Button variant="ghost" onClick={() => navigate("/designer/dashboard")}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <h1 className="text-2xl font-bold">Orders & Products Management</h1>
+            <h1 className="text-2xl font-bold">My Products & Sales</h1>
           </div>
         </div>
       </header>
@@ -336,7 +336,7 @@ const DesignerOrders = () => {
       <main className="container mx-auto px-4 py-8">
         {/* --- Products Summary --- */}
         <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">Designer Products Summary</h2>
+          <h2 className="text-xl font-semibold mb-4">Products Sales Summary</h2>
 
           {productsLoading ? (
             <div className="py-8 text-center">Loading products...</div>
@@ -352,8 +352,6 @@ const DesignerOrders = () => {
                     <TableHead>Price</TableHead>
                     <TableHead>Total Sold</TableHead>
                     <TableHead>Total Revenue</TableHead>
-                    <TableHead>Designer</TableHead>
-                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -371,19 +369,9 @@ const DesignerOrders = () => {
                       </TableCell>
                       <TableCell>{p.sku || "—"}</TableCell>
                       <TableCell>{p.currency} {p.price}</TableCell>
-                      <TableCell>{p.totalSold}</TableCell>
-                      <TableCell>₹{(p.totalRevenue || 0).toFixed(2)}</TableCell>
-                      <TableCell>{p.designer}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => navigate(`/admintesora/products/${p.id}`)}
-                          >
-                            View
-                          </Button>
-                        </div>
+                      <TableCell className="font-semibold">{p.totalSold}</TableCell>
+                      <TableCell className="font-semibold text-green-600">
+                        {p.currency || "₹"} {(p.totalRevenue || 0).toFixed(2)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -394,7 +382,7 @@ const DesignerOrders = () => {
         </div>
 
         {/* --- Orders Controls --- */}
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <div className="flex flex-col md:flex-row gap-4 mb-6 hidden">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -422,7 +410,7 @@ const DesignerOrders = () => {
         </div>
 
         {/* --- Orders Table --- */}
-        <div className="border rounded-lg overflow-hidden">
+        <div className="border rounded-lg overflow-hidden hidden">
           <Table>
             <TableHeader>
               <TableRow>
@@ -490,7 +478,7 @@ const DesignerOrders = () => {
 
         {/* --- Pagination --- */}
         {totalPages > 1 && (
-          <div className="mt-6">
+          <div className="mt-6 hidden">
             <Pagination>
               <PaginationContent>
                 <PaginationItem>
