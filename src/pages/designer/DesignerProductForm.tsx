@@ -141,36 +141,63 @@ const DesignerProductForm = () => {
 
     setSubmitting(true);
 
-    const payload = {
-      ...formData,
-      price: parseFloat(formData.price),
-      compare_at_price: formData.compare_at_price ? parseFloat(formData.compare_at_price) : null,
-      designer_id: designerId,
-    };
+    try {
+      // Check for duplicate SKU only when creating or when SKU is changed during edit
+      if (!isEdit) {
+        const { data: existingProduct } = await supabase
+          .from("products")
+          .select("id")
+          .eq("sku", formData.sku)
+          .maybeSingle();
 
-    let error;
-    
-    if (isEdit) {
-      const result = await supabase
-        .from("products")
-        .update(payload)
-        .eq("id", id);
-      error = result.error;
-    } else {
-      const result = await supabase
-        .from("products")
-        .insert(payload);
-      error = result.error;
-    }
+        if (existingProduct) {
+          toast.error(`SKU "${formData.sku}" already exists. Please use a unique SKU.`);
+          setSubmitting(false);
+          return;
+        }
+      }
 
-    setSubmitting(false);
+      const payload = {
+        ...formData,
+        price: parseFloat(formData.price),
+        compare_at_price: formData.compare_at_price ? parseFloat(formData.compare_at_price) : null,
+        designer_id: designerId,
+      };
 
-    if (error) {
-      toast.error(`Failed to ${isEdit ? "update" : "create"} product`);
-      console.error(error);
-    } else {
-      toast.success(`Product ${isEdit ? "updated" : "created"} successfully`);
-      navigate("/designer/products");
+      let error;
+      
+      if (isEdit) {
+        const result = await supabase
+          .from("products")
+          .update(payload)
+          .eq("id", id);
+        error = result.error;
+      } else {
+        const result = await supabase
+          .from("products")
+          .insert(payload);
+        error = result.error;
+      }
+
+      setSubmitting(false);
+
+      if (error) {
+        console.error("Product creation error:", error);
+        
+        // Provide user-friendly error messages
+        if (error.code === "23505") {
+          toast.error(`SKU "${formData.sku}" already exists. Please use a unique SKU.`);
+        } else {
+          toast.error(`Failed to ${isEdit ? "update" : "create"} product: ${error.message}`);
+        }
+      } else {
+        toast.success(`Product ${isEdit ? "updated" : "created"} successfully`);
+        navigate("/designer/products");
+      }
+    } catch (err) {
+      console.error("Unexpected error:", err);
+      toast.error("An unexpected error occurred");
+      setSubmitting(false);
     }
   };
 
@@ -290,6 +317,9 @@ const DesignerProductForm = () => {
                     value={formData.sku}
                     onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Stock Keeping Unit - must be unique for each product
+                  </p>
                 </div>
                 <div>
                   <Label htmlFor="visibility">Visibility *</Label>

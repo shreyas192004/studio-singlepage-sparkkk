@@ -101,6 +101,21 @@ const AdminProductForm = () => {
         return;
       }
 
+      // Check for duplicate SKU only when creating or when SKU is changed during edit
+      if (!isEdit) {
+        const { data: existingProduct } = await supabase
+          .from("products")
+          .select("id")
+          .eq("sku", formData.sku)
+          .maybeSingle();
+
+        if (existingProduct) {
+          toast.error(`SKU "${formData.sku}" already exists. Please use a unique SKU.`);
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const payload = {
         ...formData,
         price: parseFloat(formData.price),
@@ -116,7 +131,13 @@ const AdminProductForm = () => {
 
       if (error) {
         console.error("Product creation error:", error);
-        toast.error(`Failed to ${isEdit ? "update" : "create"} product: ${error.message}`);
+        
+        // Provide user-friendly error messages
+        if (error.code === "23505") {
+          toast.error(`SKU "${formData.sku}" already exists. Please use a unique SKU.`);
+        } else {
+          toast.error(`Failed to ${isEdit ? "update" : "create"} product: ${error.message}`);
+        }
       } else {
         toast.success(`Product ${isEdit ? "updated" : "created"} successfully`);
         navigate("/admintesora/products");
@@ -244,6 +265,9 @@ const AdminProductForm = () => {
                     value={formData.sku}
                     onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Stock Keeping Unit - must be unique for each product
+                  </p>
                 </div>
                 <div>
                   <Label htmlFor="visibility">Visibility *</Label>
