@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { Search, User, ShoppingCart, Heart, Sparkles, Loader2, Download, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,6 +99,7 @@ const AIGenerator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationCount, setGenerationCount] = useState(0);
   const [designText, setDesignText] = useState("");
+  const [designRecord, setDesignRecord] = useState<any | null>(null); // store returned ai_generations row (if available)
 
   const [showSurvey, setShowSurvey] = useState(false);
   const [surveyCompleted, setSurveyCompleted] = useState(false);
@@ -113,6 +114,8 @@ const AIGenerator = () => {
 
   // NEW: modal state for showing large design
   const [showLargeModal, setShowLargeModal] = useState(false);
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     const urlPrompt = searchParams.get("prompt");
@@ -160,6 +163,7 @@ const AIGenerator = () => {
 
     setIsGenerating(true);
     setGeneratedImage(null);
+    setDesignRecord(null);
 
     try {
       const sessionId = user?.id || `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -175,7 +179,6 @@ const AIGenerator = () => {
         imagePosition,
       };
 
-      // Only include text if provided
       const trimmedText = designText.trim();
       if (trimmedText.length > 0) {
         body.text = trimmedText;
@@ -193,16 +196,29 @@ const AIGenerator = () => {
 
       setGeneratedImage(data.imageUrl);
 
-      await (supabase as any).from("ai_generations").insert({
-        user_id: user?.id || null,
-        session_id: sessionId,
-        image_url: data.imageUrl,
-        prompt: trimmedPrompt,
-        style,
-        color_scheme: colorScheme,
-        clothing_type: clothingType,
-        image_position: imagePosition,
-      });
+      // insert into ai_generations and capture returned row (so we can reference later)
+      const insertResp = await (supabase as any)
+        .from("ai_generations")
+        .insert({
+          user_id: user?.id || null,
+          session_id: sessionId,
+          image_url: data.imageUrl,
+          prompt: trimmedPrompt,
+          style,
+          color_scheme: colorScheme,
+          clothing_type: clothingType,
+          image_position: imagePosition,
+          included_text: data?.includedText ?? null,
+        })
+        .select("*")
+        .single();
+
+      if (insertResp.error) {
+        // not fatal — still let user use it
+        console.warn("Failed to persist ai_generations:", insertResp.error);
+      } else {
+        setDesignRecord(insertResp.data); // capture persisted record
+      }
 
       if (user) {
         const shortPrompt = trimmedPrompt.substring(0, 30);
@@ -268,6 +284,29 @@ const AIGenerator = () => {
     }
   };
 
+  // Buy handler - navigate to checkout page with minimal state
+  const handleBuy = () => {
+    if (!generatedImage) return toast.error("Generate a design before buying.");
+    if (!user) {
+      toast.error("Please sign in to place an order.");
+      setAuthOpen(true);
+      return;
+    }
+
+    // prepare payload: prefer persisted ai_generations row if available
+    const payload = {
+      imageUrl: generatedImage,
+      prompt,
+      style,
+      colorScheme,
+      clothingType,
+      imagePosition,
+      ai_generation_id: designRecord?.id ?? null,
+    };
+
+    navigate("/checkout-ai", { state: payload });
+  };
+
   const handleDownload = () => {
     if (!generatedImage) return;
     const canvas = document.createElement("canvas");
@@ -301,13 +340,12 @@ const AIGenerator = () => {
     img.src = generatedImage;
   };
 
-  // NEW: direct original download (no watermark)
+  // direct download original (no watermark)
   const handleDownloadOriginal = () => {
     if (!generatedImage) return;
     const a = document.createElement("a");
     a.href = generatedImage;
     a.download = `tesora-design-${Date.now()}.png`;
-    // In some cross-origin scenarios, this may open the image in a new tab instead of downloading.
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -377,7 +415,7 @@ const AIGenerator = () => {
             }}
             draggable={false}
             crossOrigin="anonymous"
-            onClick={() => setShowLargeModal(true)} // NEW: open modal on click
+            onClick={() => setShowLargeModal(true)}
           />
         )}
         {!generatedImage && (
@@ -393,6 +431,13 @@ const AIGenerator = () => {
             <Download className="w-5 h-5 mr-2" />
             Download with Watermark
           </Button>
+
+          {/* BUY BUTTON ADDED */}
+          <Button onClick={handleBuy} className="w-full bg-sale-blue hover:bg-sale-blue/95 text-white font-bold py-4 text-lg">
+            <Sparkles className="w-5 h-5 mr-2" />
+            Buy Custom {clothingType.toUpperCase()}
+          </Button>
+
           <Button variant="outline" size="lg" onClick={() => setShowLargeModal(true)} className="w-full">
             View Larger
           </Button>
@@ -657,58 +702,57 @@ const AIGenerator = () => {
           </div>
         </div>
       )}
+      {/* LARGE DESIGN MODAL - PERFECT MEDIUM SIZE */}
+      {showLargeModal && generatedImage && (
+        <div
+          className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
+          aria-modal="true"
+          role="dialog"
+        >
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/70"
+            onClick={() => setShowLargeModal(false)}
+          />
 
-{/* LARGE DESIGN MODAL - PERFECT MEDIUM SIZE */}
-{showLargeModal && generatedImage && (
-  <div
-    className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
-    aria-modal="true"
-    role="dialog"
-  >
-    {/* Backdrop */}
-    <div
-      className="absolute inset-0 bg-black/70"
-      onClick={() => setShowLargeModal(false)}
-    />
+          {/* Modal Container */}
+          <div className="relative z-10 w-full max-w-[70vw] max-h-[80vh] flex flex-col items-center">
+            {/* Close Button */}
+            <button
+              onClick={() => setShowLargeModal(false)}
+              className="absolute -top-10 right-0 bg-card/90 backdrop-blur rounded-full p-2 hover:scale-105 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
 
-    {/* Modal Container */}
-    <div className="relative z-10 w-full max-w-[70vw] max-h-[80vh] flex flex-col items-center">
-      {/* Close Button */}
-      <button
-        onClick={() => setShowLargeModal(false)}
-        className="absolute -top-10 right-0 bg-card/90 backdrop-blur rounded-full p-2 hover:scale-105 transition"
-      >
-        <X className="w-5 h-5" />
-      </button>
+            {/* Modal Content */}
+            <div className="bg-card rounded-xl shadow-2xl p-4 w-full flex flex-col items-center">
+              {/* Header */}
+              <div className="flex items-center justify-between w-full mb-3">
+                <div className="text-sm text-muted-foreground">Preview</div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleDownloadOriginal} className="flex items-center gap-2">
+                    <Download className="w-4 h-4" /> Original
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={handleDownload} className="flex items-center gap-2">
+                    <Download className="w-4 h-4" /> Watermark
+                  </Button>
+                </div>
+              </div>
 
-      {/* Modal Content */}
-      <div className="bg-card rounded-xl shadow-2xl p-4 w-full flex flex-col items-center">
-        {/* Header */}
-        <div className="flex items-center justify-between w-full mb-3">
-          <div className="text-sm text-muted-foreground">Preview</div>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={handleDownloadOriginal} className="flex items-center gap-2">
-              <Download className="w-4 h-4" /> Original
-            </Button>
-            <Button size="sm" variant="ghost" onClick={handleDownload} className="flex items-center gap-2">
-              <Download className="w-4 h-4" /> Watermark
-            </Button>
+              {/* Medium-sized Image */}
+              <div className="flex items-center justify-center w-full">
+                <img
+                  src={generatedImage}
+                  alt="Large generated design"
+                  className="object-contain max-w-[65vw] max-h-[65vh] rounded-md"
+                  draggable={false}
+                />
+              </div>
+            </div>
           </div>
         </div>
-
-        {/* Medium-sized Image */}
-        <div className="flex items-center justify-center w-full">
-          <img
-            src={generatedImage}
-            alt="Large generated design"
-            className="object-contain max-w-[65vw] max-h-[65vh] rounded-md"
-            draggable={false}
-          />
-        </div>
-      </div>
-    </div>
-  </div>
-)}
+      )}
 
 
     </div>
