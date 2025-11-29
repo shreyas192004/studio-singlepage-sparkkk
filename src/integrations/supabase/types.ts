@@ -67,30 +67,39 @@ export type Database = {
       }
       ai_generations: {
         Row: {
+          clothing_type: string | null
           color_scheme: string
           created_at: string | null
           id: string
+          image_position: string | null
           image_url: string
+          included_text: string | null
           prompt: string
           session_id: string
           style: string
           user_id: string | null
         }
         Insert: {
+          clothing_type?: string | null
           color_scheme: string
           created_at?: string | null
           id?: string
+          image_position?: string | null
           image_url: string
+          included_text?: string | null
           prompt: string
           session_id: string
           style: string
           user_id?: string | null
         }
         Update: {
+          clothing_type?: string | null
           color_scheme?: string
           created_at?: string | null
           id?: string
+          image_position?: string | null
           image_url?: string
+          included_text?: string | null
           prompt?: string
           session_id?: string
           style?: string
