@@ -190,13 +190,20 @@ const CheckoutAI: React.FC = () => {
       h1{margin:0;font-size:28px} table{width:100%;border-collapse:collapse;margin-top:12px} th{background:#f5f5f5;padding:10px;text-align:left} td{padding:10px;border-bottom:1px solid #eee}
       .right{text-align:right}.totals{width:320px;margin-left:auto;margin-top:10px}.total-row{font-weight:700;border-top:2px solid #000;padding-top:8px}
       .footer{margin-top:36px;text-align:center;color:#666;font-size:13px;border-top:1px solid #eee;padding-top:12px}
+      .detail-badge{background:#e3f2fd;padding:3px 8px;border-radius:4px;font-weight:600;margin-right:8px;display:inline-block;margin-bottom:4px}
     </style></head><body>
       <div class="header"><h1>Invoice</h1><div>Order #${orderNumber}</div><div>${invoiceDate}</div></div>
       <div><strong>Bill To:</strong><br/>${user?.email ?? "—"}</div>
       <div style="margin-top:12px"><strong>Item</strong>
         <table><thead><tr><th>Product</th><th>Details</th><th class="right">Qty</th><th class="right">Unit</th><th class="right">Total</th></tr></thead>
-        <tbody><tr><td>Custom AI ${escapeHtml(clothingType)}</td>
-        <td>${prompt ? `Prompt: ${escapeHtml(prompt)}<br/>` : ""}Position: ${escapeHtml(imagePosition)}<br/>Size: ${escapeHtml(size)}<br/>Color: ${escapeHtml(color)}</td>
+        <tbody><tr><td>Custom AI Design</td>
+        <td>
+          <span class="detail-badge">Cloth: ${escapeHtml(clothingType)}</span>
+          <span class="detail-badge">Size: ${escapeHtml(size)}</span>
+          <span class="detail-badge">Color: ${escapeHtml(color)}</span>
+          <br/><small>Position: ${escapeHtml(imagePosition)}</small>
+          ${prompt ? `<br/><small>Prompt: ${escapeHtml(prompt)}</small>` : ""}
+        </td>
         <td class="right">${quantity}</td><td class="right">Rs ${Number(price).toFixed(2)}</td><td class="right">Rs ${(price * quantity).toFixed(2)}</td></tr></tbody></table>
       </div>
       <div class="totals"><table><tr><td>Subtotal:</td><td class="right">Rs ${(price * quantity).toFixed(2)}</td></tr><tr><td>Shipping:</td><td class="right">Free</td></tr>
@@ -210,11 +217,18 @@ const CheckoutAI: React.FC = () => {
     const invoiceDate = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
     return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Manufacturing Order #${orderNumber}</title><style>
       body{font-family:Arial;margin:36px;color:#222}.header{text-align:center;margin-bottom:18px}h1{margin:0;font-size:24px}table{width:100%;border-collapse:collapse}th{background:#f5f5f5;padding:10px;text-align:left}td{padding:8px;border-bottom:1px solid #eee}.right{text-align:right}.small{font-size:13px;color:#555}
+      .highlight{background:#fff3cd;padding:4px 10px;border-radius:4px;font-weight:bold}
     </style></head><body><div class="header"><h1>MANUFACTURING ORDER</h1><div>Order #${orderNumber} — ${invoiceDate}</div></div>
       <div><strong>Buyer:</strong><br/>${user?.email ?? "—"}</div>
       <div style="margin-top:12px"><h3>Production Details</h3><table><thead><tr><th>Product</th><th>Cloth Type</th><th>Size</th><th>Color</th><th class="right">Qty</th></tr></thead>
-      <tbody><tr><td>Custom AI ${escapeHtml(clothingType)}</td><td>${escapeHtml(clothingType)}</td><td>${escapeHtml(size)}</td><td>${escapeHtml(color)}</td><td class="right">${quantity}</td></tr></tbody></table>
-      <p class="small">AI Design reference: ${aiDesignPublicUrl ? `<a href="${aiDesignPublicUrl}">Design link</a>` : (imageUrl ? `<a href="${imageUrl}">Original design</a>` : "—")}<br/>Prompt: ${prompt ? escapeHtml(prompt) : "—"}</p>
+      <tbody><tr>
+        <td>Custom AI Design</td>
+        <td><span class="highlight">${escapeHtml(clothingType)}</span></td>
+        <td><span class="highlight">${escapeHtml(size)}</span></td>
+        <td><span class="highlight">${escapeHtml(color)}</span></td>
+        <td class="right"><strong>${quantity}</strong></td>
+      </tr></tbody></table>
+      <p class="small">AI Design reference: ${aiDesignPublicUrl ? `<a href="${aiDesignPublicUrl}">Design link</a>` : (imageUrl ? `<a href="${imageUrl}">Original design</a>` : "—")}<br/>Image Position: ${escapeHtml(imagePosition)}<br/>Prompt: ${prompt ? escapeHtml(prompt) : "—"}</p>
       <div class="small">Please follow the size & color breakdown above. Confirm fabric availability and lead time before production.</div></body></html>`;
   };
 
@@ -263,13 +277,19 @@ const CheckoutAI: React.FC = () => {
       price: opts?.price ?? price,
       currency: "INR",
       images: [publicUrl],
-      images_generated_by_users: true,
-      designer_id: "ADMIN",
+      images_generated_by_users: 0,
+      designer_id: null,
       created_by: user.id,
-      visibility: true,
+      visibility: "public",
       date_added: new Date().toISOString(),
-      ai_generation_id: opts?.ai_generation_id ?? aiGenerationId ?? null,
+      ai_generation_id: opts?.ai_generation_id?.toString() ?? aiGenerationId?.toString() ?? null,
       category: "AI Generated",
+      is_ai_generated: true,
+      clothing_type: clothingType,
+      image_position: imagePosition,
+      sizes: size ? [size] : [],
+      colors: color ? [color] : [],
+      inventory: { total: 1, bySize: {} },
     };
 
     const { data: product, error } = await supabase
@@ -378,22 +398,13 @@ const CheckoutAI: React.FC = () => {
       const orderItemRow: any = {
         order_id: orderData.id,
         product_id: productIdToUse ?? null,
-        product_name: productIdToUse ? undefined : `Custom AI ${clothingType}`,
+        product_name: `Custom AI ${clothingType}`,
         product_image: aiDesignPublicUrl ?? imageUrl,
         quantity,
         unit_price: price,
         total_price: price * quantity,
         size,
         color,
-        item_type: "custom_ai",
-        design_id: aiGenerationId ?? null,
-        cloth_type: clothingType,
-        metadata: {
-          prompt,
-          image_position: imagePosition,
-          ai_design_url: aiDesignPublicUrl ?? imageUrl ?? null,
-        },
-        created_by: user.id,
       };
 
       const { error: itemError } = await supabase.from("order_items").insert(orderItemRow as any);
@@ -447,11 +458,15 @@ const CheckoutAI: React.FC = () => {
                 )}
               </div>
 
-              <div className="mt-4 text-sm text-muted-foreground">
-                <div><strong>Prompt:</strong> {prompt ?? "—"}</div>
-                <div className="mt-1"><strong>Position:</strong> {imagePosition}</div>
-                <div className="mt-1"><strong>Design ID:</strong> {aiGenerationId ?? "—"}</div>
-                <div className="mt-1"><strong>Product ID (if existing):</strong> {existingProductId ?? "—"}</div>
+              <div className="mt-4 space-y-2">
+                <div className="inline-flex items-center gap-2 bg-primary/10 px-3 py-1.5 rounded-lg">
+                  <span className="font-semibold text-primary">Cloth Type:</span>
+                  <span className="capitalize">{clothingType || "T-Shirt"}</span>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  <div><strong>Prompt:</strong> {prompt ?? "—"}</div>
+                  <div className="mt-1"><strong>Image Position:</strong> {imagePosition}</div>
+                </div>
               </div>
             </div>
 
