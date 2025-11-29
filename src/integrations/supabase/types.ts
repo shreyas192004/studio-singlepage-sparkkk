@@ -244,6 +244,50 @@ export type Database = {
         }
         Relationships: []
       }
+      designer_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          designer_id: string
+          id: string
+          notes: string | null
+          payment_date: string
+          payment_method: string
+          transaction_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          designer_id: string
+          id?: string
+          notes?: string | null
+          payment_date?: string
+          payment_method: string
+          transaction_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          designer_id?: string
+          id?: string
+          notes?: string | null
+          payment_date?: string
+          payment_method?: string
+          transaction_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "designer_payments_designer_id_fkey"
+            columns: ["designer_id"]
+            isOneToOne: false
+            referencedRelation: "designers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       designers: {
         Row: {
           avatar_url: string | null

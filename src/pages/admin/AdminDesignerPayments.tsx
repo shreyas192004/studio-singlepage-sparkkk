@@ -89,10 +89,10 @@ const AdminDesignerPayments = () => {
 
       if (productsError) throw productsError;
 
-      // Get existing payments
+      // Get existing payments using raw query to avoid type issues
       const { data: payments, error: paymentsError } = await supabase
-        .from("designer_payments")
-        .select("designer_id, amount");
+        .from("designer_payments" as any)
+        .select("designer_id, amount") as any;
 
       // Calculate earnings per designer
       const productDesignerMap = new Map(products.map(p => [p.id, p.designer_id]));
@@ -106,9 +106,10 @@ const AdminDesignerPayments = () => {
         const totalSales = designerOrderItems.reduce((sum, item) => sum + item.quantity, 0);
         const totalAmount = designerOrderItems.reduce((sum, item) => sum + Number(item.total_price), 0);
         
-        const paidAmount = (payments || [])
-          .filter(p => p.designer_id === designer.id)
-          .reduce((sum, p) => sum + Number(p.amount), 0);
+        const paymentsData = payments?.data || payments || [];
+        const paidAmount = paymentsData
+          .filter((p: any) => p.designer_id === designer.id)
+          .reduce((sum: number, p: any) => sum + Number(p.amount), 0);
 
         return {
           designer_id: designer.id,
@@ -133,7 +134,7 @@ const AdminDesignerPayments = () => {
   const fetchPaymentHistory = async () => {
     try {
       const { data, error } = await supabase
-        .from("designer_payments")
+        .from("designer_payments" as any)
         .select(`
           id,
           designer_id,
@@ -144,7 +145,7 @@ const AdminDesignerPayments = () => {
           notes,
           designers(name)
         `)
-        .order("payment_date", { ascending: false });
+        .order("payment_date", { ascending: false }) as any;
 
       if (error) throw error;
 
@@ -179,14 +180,14 @@ const AdminDesignerPayments = () => {
 
     setProcessingPayment(true);
     try {
-      const { error } = await supabase.from("designer_payments").insert({
+      const { error } = await supabase.from("designer_payments" as any).insert({
         designer_id: selectedDesigner.designer_id,
         amount: parseFloat(paymentAmount),
         payment_method: paymentMethod,
         transaction_id: transactionId,
         notes: paymentNotes || null,
         payment_date: new Date().toISOString(),
-      });
+      } as any);
 
       if (error) throw error;
 
