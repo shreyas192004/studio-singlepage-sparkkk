@@ -1,3 +1,4 @@
+// src/components/CartSidebar.tsx
 import { X, Minus, Plus, ShoppingBag } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
@@ -41,7 +42,7 @@ export const CartSidebar = ({ open, onClose }: CartSidebarProps) => {
   };
 
   const handleIncrease = (item: any, itemKey: string) => {
-    const nextQty = item.quantity + 1;
+    const nextQty = (Number(item.quantity) || 0) + 1;
     if (nextQty > 9) {
       // show bulk button/prompt instead of increasing
       setBulkItemKey(itemKey);
@@ -53,7 +54,7 @@ export const CartSidebar = ({ open, onClose }: CartSidebarProps) => {
   };
 
   const handleDecrease = (item: any) => {
-    const nextQty = item.quantity - 1;
+    const nextQty = (Number(item.quantity) || 0) - 1;
     if (nextQty < 1) {
       removeFromCart(item.id, item.size, item.color);
       return;
@@ -87,6 +88,22 @@ export const CartSidebar = ({ open, onClose }: CartSidebarProps) => {
     navigate("/bulk", { state: payload });
   };
 
+  // small helper to pick image safely
+  const pickImage = (item: any) => {
+    if (!item) return "";
+    // support different shapes: image, images[0], product.images[0]
+    if (typeof item.image === "string" && item.image) return item.image;
+    if (Array.isArray(item.images) && item.images.length) return item.images[0];
+    if (item.product?.images && Array.isArray(item.product.images) && item.product.images.length) return item.product.images[0];
+    return "/placeholder-product.png";
+  };
+
+  // format price robustly (accept string or number)
+  const fmtPrice = (p: any) => {
+    const n = typeof p === "number" ? p : parseFloat(String(p || "0")) || 0;
+    return n;
+  };
+
   return (
     <Sheet open={open} onOpenChange={onClose}>
       <SheetContent className="w-full sm:max-w-lg flex flex-col">
@@ -109,27 +126,41 @@ export const CartSidebar = ({ open, onClose }: CartSidebarProps) => {
           <>
             <ScrollArea className="flex-1 -mx-6 px-6">
               <div className="space-y-4 py-4">
-                {cart.map((item, index) => {
-                  const itemKey = `${item.id}-${item.size}-${item.color}-${index}`;
-                  const isAtLimit = item.quantity >= 9;
+                {cart.map((item: any, index: number) => {
+                  const itemKey = `${item.id}-${item.size ?? "nosz"}-${item.color ?? "nocol"}-${index}`;
+                  const isAtLimit = Number(item.quantity) >= 9;
                   const showBulk = isAtLimit || bulkItemKey === itemKey;
+
+                  const imageSrc = pickImage(item);
+                  const priceNum = fmtPrice(item.price);
+                  const clothingType = item.clothing_type ?? item.cloth_type ?? item.clothType ?? item.clothingType ?? null;
+                  const isAi = item.ai_generation_id || item.is_ai_generated || item.ai;
 
                   return (
                     <div key={itemKey} className="flex gap-4 pb-4 border-b">
                       <img
-                        src={item.image}
-                        alt={item.name}
+                        src={imageSrc}
+                        alt={item.name ?? "product"}
                         className="w-20 h-20 object-cover rounded-lg"
                       />
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-sm mb-1 truncate">{item.name}</h4>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-semibold text-sm mb-1 truncate">{item.name}</h4>
+                          {isAi && <span className="text-xs bg-sale-blue/10 text-sale-blue rounded-md px-2 py-0.5">AI</span>}
+                        </div>
+
+                        {clothingType && (
+                          <p className="text-xs text-muted-foreground">Cloth: {String(clothingType)}</p>
+                        )}
+
                         {item.size && (
                           <p className="text-xs text-muted-foreground">Size: {item.size}</p>
                         )}
                         {item.color && (
                           <p className="text-xs text-muted-foreground">Color: {item.color}</p>
                         )}
-                        <p className="font-bold text-sm mt-1">Rs {item.price.toFixed(2)}</p>
+
+                        <p className="font-bold text-sm mt-1">Rs {priceNum.toFixed(2)}</p>
 
                         <div className="flex items-center gap-2 mt-2">
                           <Button
@@ -193,7 +224,7 @@ export const CartSidebar = ({ open, onClose }: CartSidebarProps) => {
             <SheetFooter className="flex-col gap-4 mt-4">
               <div className="flex justify-between items-center text-lg font-bold">
                 <span>Total:</span>
-                <span>Rs {cartTotal.toFixed(2)}</span>
+                <span>Rs {Number(cartTotal).toFixed(2)}</span>
               </div>
               <div className="flex gap-2 w-full">
                 <Button variant="outline" onClick={clearCart} className="flex-1">
@@ -207,8 +238,7 @@ export const CartSidebar = ({ open, onClose }: CartSidebarProps) => {
           </>
         )}
 
-        {/* Bulk modal (small inline modal) showing company details.
-            The contact form is commented out for future use. */}
+        {/* Bulk modal (small inline modal) showing company details. */}
         {bulkModalOpen && bulkModalItem && (
           <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
             {/* backdrop */}
@@ -256,51 +286,6 @@ export const CartSidebar = ({ open, onClose }: CartSidebarProps) => {
                   <div className="font-medium">27ABCDE1234F1Z5</div>
                 </div>
               </div>
-
-              {/* ---- Commented: original contact form (kept for future) ----
-              <form onSubmit={handleBulkSubmit} className="mt-4 space-y-3">
-                <div>
-                  <label className="text-xs block mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    className="w-full rounded-md border px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs block mb-1">Phone</label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+91 98765 43210"
-                    className="w-full rounded-md border px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs block mb-1">Address</label>
-                  <textarea
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="Street, city, pincode..."
-                    className="w-full rounded-md border px-3 py-2 text-sm min-h-[72px]"
-                  />
-                </div>
-
-                {formError && <p className="text-sm text-destructive">{formError}</p>}
-
-                <div className="flex gap-2 justify-end pt-2">
-                  <Button variant="outline" onClick={closeBulkModal} type="button">
-                    Cancel
-                  </Button>
-                  <Button type="submit">Send request</Button>
-                </div>
-              </form>
-              ---- end commented form ---- */}
 
               <div className="flex gap-2 justify-end pt-4">
                 <Button variant="outline" onClick={closeBulkModal}>

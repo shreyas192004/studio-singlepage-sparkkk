@@ -1,7 +1,8 @@
+// src/contexts/WishlistContext.tsx (updated)
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 export interface WishlistItem {
-  id: number;
+  id: string; // changed to string to accept DB/uuid ids
   name: string;
   price: number;
   oldPrice?: string;
@@ -12,8 +13,8 @@ export interface WishlistItem {
 interface WishlistContextType {
   wishlist: WishlistItem[];
   addToWishlist: (item: WishlistItem) => void;
-  removeFromWishlist: (id: number) => void;
-  isInWishlist: (id: number) => boolean;
+  removeFromWishlist: (id: string) => void;
+  isInWishlist: (id: string) => boolean;
   toggleWishlist: (item: WishlistItem) => void;
 }
 
@@ -32,7 +33,6 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (error instanceof DOMException && error.name === 'QuotaExceededError') {
         console.error('Wishlist storage quota exceeded. Clearing old data.');
         localStorage.removeItem('wishlist');
-        // Keep only the first 50 items to stay within quota
         const limitedWishlist = wishlist.slice(0, 50);
         try {
           localStorage.setItem('wishlist', JSON.stringify(limitedWishlist));
@@ -47,7 +47,6 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const addToWishlist = (item: WishlistItem) => {
     setWishlist(prev => {
       if (prev.some(i => i.id === item.id)) return prev;
-      // Limit wishlist to 100 items to prevent storage issues
       if (prev.length >= 100) {
         console.warn('Wishlist limit reached (100 items)');
         return prev;
@@ -56,11 +55,11 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
   };
 
-  const removeFromWishlist = (id: number) => {
+  const removeFromWishlist = (id: string) => {
     setWishlist(prev => prev.filter(item => item.id !== id));
   };
 
-  const isInWishlist = (id: number) => {
+  const isInWishlist = (id: string) => {
     return wishlist.some(item => item.id === id);
   };
 

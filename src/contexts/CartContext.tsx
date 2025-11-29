@@ -1,7 +1,8 @@
+// src/contexts/CartContext.tsx (updated)
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 export interface CartItem {
-  id: number;
+  id: string; // string to match DB product ids (uuid)
   name: string;
   price: number;
   image: string;
@@ -12,7 +13,7 @@ export interface CartItem {
 
 // allow addToCart to accept an optional quantity
 interface AddToCartPayload {
-  id: number;
+  id: string;
   name: string;
   price: number;
   image: string;
@@ -24,8 +25,8 @@ interface AddToCartPayload {
 interface CartContextType {
   cart: CartItem[];
   addToCart: (item: AddToCartPayload) => void;
-  removeFromCart: (id: number, size?: string, color?: string) => void;
-  updateQuantity: (id: number, quantity: number, size?: string, color?: string) => void;
+  removeFromCart: (id: string, size?: string, color?: string) => void;
+  updateQuantity: (id: string, quantity: number, size?: string, color?: string) => void;
   clearCart: () => void;
   cartTotal: number;
   cartCount: number;
@@ -40,7 +41,23 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useEffect(() => {
-    localStorage.setItem('cart', JSON.stringify(cart));
+    try {
+      localStorage.setItem('cart', JSON.stringify(cart));
+    } catch (err) {
+      // if localStorage fails (quota), try trimming
+      if (err instanceof DOMException && err.name === "QuotaExceededError") {
+        console.warn("Cart storage quota exceeded; trimming cart to 20 items.");
+        const limited = cart.slice(0, 20);
+        try {
+          localStorage.setItem('cart', JSON.stringify(limited));
+          setCart(limited);
+        } catch (e) {
+          console.error("Failed to save trimmed cart:", e);
+        }
+      } else {
+        console.error("Failed to save cart:", err);
+      }
+    }
   }, [cart]);
 
   const addToCart = (item: AddToCartPayload) => {
@@ -65,13 +82,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const removeFromCart = (id: number, size?: string, color?: string) => {
+  const removeFromCart = (id: string, size?: string, color?: string) => {
     setCart(prev => prev.filter(
       item => !(item.id === id && item.size === size && item.color === color)
     ));
   };
 
-  const updateQuantity = (id: number, quantity: number, size?: string, color?: string) => {
+  const updateQuantity = (id: string, quantity: number, size?: string, color?: string) => {
     if (quantity <= 0) {
       removeFromCart(id, size, color);
       return;

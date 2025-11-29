@@ -1,3 +1,4 @@
+// src/pages/CheckoutAI.tsx  (updated)
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Label } from "@/components/ui/label";
@@ -19,7 +20,8 @@ type LocationState = {
   colorScheme?: string;
   clothingType?: string;
   imagePosition?: string;
-  ai_generation_id?: string | null;
+  ai_generation_id?: string | number | null;
+  productId?: number | null; // if AIGenerator already created product
 };
 
 const CheckoutAI: React.FC = () => {
@@ -27,14 +29,14 @@ const CheckoutAI: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // payload passed from AIGenerator via navigate("/checkout-ai", { state: payload })
   const payload = (location.state ?? {}) as LocationState;
 
   const [imageUrl, setImageUrl] = useState<string | null>(payload.imageUrl ?? null);
   const [prompt, setPrompt] = useState<string>(payload.prompt ?? "");
   const [clothingType, setClothingType] = useState<string>(payload.clothingType ?? "t-shirt");
   const [imagePosition, setImagePosition] = useState<string>(payload.imagePosition ?? "front");
-  const [aiGenerationId, setAiGenerationId] = useState<string | null>(payload.ai_generation_id ?? null);
+  const [aiGenerationId, setAiGenerationId] = useState<string | number | null>(payload.ai_generation_id ?? null);
+  const [existingProductId] = useState<number | null>(payload.productId ?? null);
 
   const [size, setSize] = useState<string>("M");
   const [color, setColor] = useState<string>("black");
@@ -73,168 +75,108 @@ const CheckoutAI: React.FC = () => {
     return await res.blob();
   };
 
-  // ---------- invoice HTML generators ----------
   const generateInvoiceHTML = (orderNumber: string, aiDesignPublicUrl?: string) => {
     const invoiceDate = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
     const total = (price * quantity).toFixed(2);
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8" />
-        <title>Invoice #${orderNumber}</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 36px; color: #222; }
-          .header { text-align:center; border-bottom:2px solid #000; padding-bottom:14px; margin-bottom:18px; }
-          h1 { margin:0; font-size:28px; }
-          .section { margin-bottom:14px; }
-          table { width:100%; border-collapse: collapse; margin-top:12px; }
-          th { text-align:left; background:#f5f5f5; padding:10px; border-bottom:1px solid #ddd; }
-          td { padding:10px; border-bottom:1px solid #eee; vertical-align:top; }
-          .right { text-align:right; }
-          .totals { width:320px; margin-left:auto; margin-top:10px; }
-          .total-row { font-weight:700; border-top:2px solid #000; padding-top:8px; }
-          .footer { margin-top:36px; text-align:center; color:#666; font-size:13px; border-top:1px solid #eee; padding-top:12px; }
-          a { color:#0b69ff; text-decoration:none; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>Invoice</h1>
-          <div>Order #${orderNumber}</div>
-          <div>${invoiceDate}</div>
-        </div>
-
-        <div class="section">
-          <strong>Bill To:</strong><br/>
-          ${user?.email ?? "—"}<br/>
-        </div>
-
-        <div class="section">
-          <strong>Item</strong>
-          <table>
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Details</th>
-                <th class="right">Qty</th>
-                <th class="right">Unit</th>
-                <th class="right">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Custom AI ${escapeHtml(clothingType)}</td>
-                <td>
-                  ${prompt ? `Prompt: ${escapeHtml(prompt)}<br/>` : ""}
-                  Position: ${escapeHtml(imagePosition)}<br/>
-                  Size: ${escapeHtml(size)}<br/>
-                  Color: ${escapeHtml(color)}
-                </td>
-                <td class="right">${quantity}</td>
-                <td class="right">Rs ${Number(price).toFixed(2)}</td>
-                <td class="right">Rs ${(price * quantity).toFixed(2)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="totals">
-          <table>
-            <tr>
-              <td>Subtotal:</td>
-              <td class="right">Rs ${(price * quantity).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Shipping:</td>
-              <td class="right">Free</td>
-            </tr>
-            <tr class="total-row">
-              <td>Total:</td>
-              <td class="right">Rs ${total}</td>
-            </tr>
-          </table>
-        </div>
-
-        <div class="section">
-          <strong>Design:</strong><br/>
-          ${aiDesignPublicUrl ? `<a href="${aiDesignPublicUrl}">View Uploaded Design</a>` : (imageUrl ? `<a href="${imageUrl}">View Original Design</a>` : "—")}
-        </div>
-
-        <div class="footer">
-          Thank you for your purchase! If you have questions, contact support.
-        </div>
-      </body>
-      </html>
-    `;
+    return `<!DOCTYPE html><html><head><meta charset="utf-8" /><title>Invoice #${orderNumber}</title><style>
+      body{font-family:Arial;margin:36px;color:#222} .header{text-align:center;border-bottom:2px solid #000;padding-bottom:14px;margin-bottom:18px}
+      h1{margin:0;font-size:28px} table{width:100%;border-collapse:collapse;margin-top:12px} th{background:#f5f5f5;padding:10px;text-align:left} td{padding:10px;border-bottom:1px solid #eee}
+      .right{text-align:right}.totals{width:320px;margin-left:auto;margin-top:10px}.total-row{font-weight:700;border-top:2px solid #000;padding-top:8px}
+      .footer{margin-top:36px;text-align:center;color:#666;font-size:13px;border-top:1px solid #eee;padding-top:12px}
+    </style></head><body>
+      <div class="header"><h1>Invoice</h1><div>Order #${orderNumber}</div><div>${invoiceDate}</div></div>
+      <div><strong>Bill To:</strong><br/>${user?.email ?? "—"}</div>
+      <div style="margin-top:12px"><strong>Item</strong>
+        <table><thead><tr><th>Product</th><th>Details</th><th class="right">Qty</th><th class="right">Unit</th><th class="right">Total</th></tr></thead>
+        <tbody><tr><td>Custom AI ${escapeHtml(clothingType)}</td>
+        <td>${prompt ? `Prompt: ${escapeHtml(prompt)}<br/>` : ""}Position: ${escapeHtml(imagePosition)}<br/>Size: ${escapeHtml(size)}<br/>Color: ${escapeHtml(color)}</td>
+        <td class="right">${quantity}</td><td class="right">Rs ${Number(price).toFixed(2)}</td><td class="right">Rs ${(price * quantity).toFixed(2)}</td></tr></tbody></table>
+      </div>
+      <div class="totals"><table><tr><td>Subtotal:</td><td class="right">Rs ${(price * quantity).toFixed(2)}</td></tr><tr><td>Shipping:</td><td class="right">Free</td></tr>
+      <tr class="total-row"><td>Total:</td><td class="right">Rs ${total}</td></tr></table></div>
+      <div style="margin-top:12px"><strong>Design:</strong><br/>${aiDesignPublicUrl ? `<a href="${aiDesignPublicUrl}">View Uploaded Design</a>` : (imageUrl ? `<a href="${imageUrl}">View Original Design</a>` : "—")}</div>
+      <div class="footer">Thank you for your purchase! If you have questions, contact support.</div>
+    </body></html>`;
   };
 
   const generatePurchaseInvoiceHTML = (orderNumber: string, aiDesignPublicUrl?: string) => {
     const invoiceDate = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8"/>
-        <title>Manufacturing Order #${orderNumber}</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 36px; color:#222; }
-          .header { text-align:center; margin-bottom:18px; }
-          h1 { margin:0; font-size:24px; }
-          .section { margin-bottom:14px; }
-          table { width:100%; border-collapse:collapse; }
-          th { background:#f5f5f5; padding:10px; text-align:left; }
-          td { padding:8px; border-bottom:1px solid #eee; }
-          .right { text-align:right; }
-          .small { font-size:13px; color:#555; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>MANUFACTURING ORDER</h1>
-          <div>Order #${orderNumber} — ${invoiceDate}</div>
-        </div>
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Manufacturing Order #${orderNumber}</title><style>
+      body{font-family:Arial;margin:36px;color:#222}.header{text-align:center;margin-bottom:18px}h1{margin:0;font-size:24px}table{width:100%;border-collapse:collapse}th{background:#f5f5f5;padding:10px;text-align:left}td{padding:8px;border-bottom:1px solid #eee}.right{text-align:right}.small{font-size:13px;color:#555}
+    </style></head><body><div class="header"><h1>MANUFACTURING ORDER</h1><div>Order #${orderNumber} — ${invoiceDate}</div></div>
+      <div><strong>Buyer:</strong><br/>${user?.email ?? "—"}</div>
+      <div style="margin-top:12px"><h3>Production Details</h3><table><thead><tr><th>Product</th><th>Cloth Type</th><th>Size</th><th>Color</th><th class="right">Qty</th></tr></thead>
+      <tbody><tr><td>Custom AI ${escapeHtml(clothingType)}</td><td>${escapeHtml(clothingType)}</td><td>${escapeHtml(size)}</td><td>${escapeHtml(color)}</td><td class="right">${quantity}</td></tr></tbody></table>
+      <p class="small">AI Design reference: ${aiDesignPublicUrl ? `<a href="${aiDesignPublicUrl}">Design link</a>` : (imageUrl ? `<a href="${imageUrl}">Original design</a>` : "—")}<br/>Prompt: ${prompt ? escapeHtml(prompt) : "—"}</p>
+      <div class="small">Please follow the size & color breakdown above. Confirm fabric availability and lead time before production.</div></body></html>`;
+  };
 
-        <div class="section">
-          <strong>Buyer:</strong><br/>
-          ${user?.email ?? "—"}
-        </div>
+  /**
+   * Upload arbitrary Blob/File to a bucket and return publicUrl & path.
+   * Uses File wrapper for better browser behavior.
+   */
+  const uploadToBucket = async (bucket: string, path: string, blob: Blob | File, contentType?: string) => {
+    try {
+      const file = blob instanceof File ? blob : new File([blob], path.split("/").pop() || "file", { type: contentType || (blob as Blob).type || "application/octet-stream" });
+      const { error: uploadErr } = await supabase.storage.from(bucket).upload(path, file, { contentType: file.type, upsert: true });
+      if (uploadErr) {
+        console.error(`[uploadToBucket] upload error bucket=${bucket} path=${path}`, uploadErr);
+        throw uploadErr;
+      }
+      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+      return { publicUrl: data?.publicUrl ?? null, path };
+    } catch (err) {
+      console.error("[uploadToBucket] error", err);
+      throw err;
+    }
+  };
 
-        <div class="section">
-          <h3>Production Details</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Cloth Type</th>
-                <th>Size</th>
-                <th>Color</th>
-                <th class="right">Qty</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Custom AI ${escapeHtml(clothingType)}</td>
-                <td>${escapeHtml(clothingType)}</td>
-                <td>${escapeHtml(size)}</td>
-                <td>${escapeHtml(color)}</td>
-                <td class="right">${quantity}</td>
-              </tr>
-            </tbody>
-          </table>
+  /**
+   * Create a product row in `products` table for this AI design.
+   * Returns inserted product row (product) and uploaded image publicUrl/path.
+   */
+  const createProductForAiDesign = async (aiImageUrl: string, opts?: { title?: string; description?: string; price?: number; ai_generation_id?: string | number | null }) => {
+    if (!user) throw new Error("User required to create product");
 
-          <p class="small">
-            AI Design reference: ${aiDesignPublicUrl ? `<a href="${aiDesignPublicUrl}">Design link</a>` : (imageUrl ? `<a href="${imageUrl}">Original design</a>` : "—")}<br/>
-            Prompt: ${prompt ? escapeHtml(prompt) : "—"}
-          </p>
-        </div>
+    // 1) fetch remote image blob
+    const blob = await fetchImageAsBlob(aiImageUrl);
+    const ext = blob.type?.split("/")?.[1] ?? "png";
+    const sku = `AI-${Date.now()}`;
+    const filename = `${sku}.${ext}`;
+    const storagePath = `products/${sku}/${filename}`;
 
-        <div class="section small">
-          Please follow the size & color breakdown above. Confirm fabric availability and lead time before production.
-        </div>
-      </body>
-      </html>
-    `;
+    // 2) upload to ai-designs bucket
+    const { publicUrl } = await uploadToBucket("ai-designs", storagePath, blob, blob.type);
+
+    // 3) insert product row (single object insert to satisfy TS overload)
+    const productRow = {
+      sku,
+      title: opts?.title ?? `AI Generated — ${prompt?.slice(0, 40) || sku}`,
+      description: opts?.description ?? `AI generated design — prompt: ${prompt?.slice(0, 120)}`,
+      price: opts?.price ?? price,
+      currency: "INR",
+      images: [publicUrl],
+      images_generated_by_users: true,
+      designer_id: "ADMIN",
+      created_by: user.id,
+      visibility: true,
+      date_added: new Date().toISOString(),
+      ai_generation_id: opts?.ai_generation_id ?? aiGenerationId ?? null,
+      category: "AI Generated",
+    };
+
+    const { data: product, error } = await supabase
+      .from("products")
+      .insert(productRow as any)
+      .select("*")
+      .single();
+
+    if (error) {
+      console.error("[createProductForAiDesign] product insert error:", error);
+      throw error;
+    }
+
+    return { product, publicUrl, storagePath };
   };
 
   // ---------- main place order ----------
@@ -249,72 +191,58 @@ const CheckoutAI: React.FC = () => {
     }
 
     setIsPlacing(true);
+    toast.loading("Placing order...");
 
     try {
-      // 1) generate order number
       const orderNumber = `ORD-${Date.now().toString().slice(-8)}`;
       const total = price * quantity;
 
-      // 2) upload generated image into 'ai-designs' bucket under folder for this order (if available)
+      // 1) If product already exists (passed from generator), use it. Otherwise create product now.
+      let productIdToUse: number | null = existingProductId ?? null;
       let aiDesignPublicUrl: string | null = null;
-      if (imageUrl) {
-        try {
-          const imgBlob = await fetchImageAsBlob(imageUrl);
-          const ext = (imgBlob.type && imgBlob.type.split("/")[1]) || "png";
-          const designPath = `${orderNumber}/design.${ext}`; // we'll upload into bucket root folder orderNumber
-          const { error: uploadErr } = await supabase.storage
-            .from("ai-designs")
-            .upload(designPath, imgBlob, { contentType: imgBlob.type, upsert: true });
 
-          if (uploadErr) {
-            console.warn("ai-design upload error:", uploadErr);
-          } else {
-            const { data } = supabase.storage.from("ai-designs").getPublicUrl(designPath);
-            aiDesignPublicUrl = data?.publicUrl ?? null;
-          }
-        } catch (err) {
-          console.warn("Failed to upload ai-design to storage:", err);
-          // continue — invoices will reference original imageUrl if upload failed
+      if (!productIdToUse) {
+        if (!imageUrl) throw new Error("No image to create product from.");
+        try {
+          const { product, publicUrl } = await createProductForAiDesign(imageUrl, {
+            title: `AI Design — ${prompt?.slice(0, 30)}`,
+            description: `Custom AI design — prompt: ${prompt}`,
+            price,
+            ai_generation_id: aiGenerationId ?? null,
+          });
+          productIdToUse = product.id;
+          aiDesignPublicUrl = publicUrl;
+        } catch (err: any) {
+          console.warn("Could not create product; attempting to continue with imageUrl for order_items:", err?.message || err);
+          // If product creation fails due to storage/RLS, we'll still create the order and order_item using the design URL.
+          aiDesignPublicUrl = imageUrl;
         }
+      } else {
+        // If product existed, try to fetch its images for linking
+        const { data: existingProduct } = await supabase.from("products").select("id, images").eq("id", productIdToUse).single();
+        aiDesignPublicUrl = existingProduct?.images?.[0] ?? imageUrl;
       }
 
-      // 3) generate invoices (customer + purchase), include aiDesignPublicUrl when available
+      // 2) Generate invoices HTML
       const invoiceHTML = generateInvoiceHTML(orderNumber, aiDesignPublicUrl ?? imageUrl ?? undefined);
       const purchaseHTML = generatePurchaseInvoiceHTML(orderNumber, aiDesignPublicUrl ?? imageUrl ?? undefined);
 
-      // 4) upload invoices to storage:
-      //    - customer invoice -> bucket "invoices"
-      //    - manufacturer (purchase) invoice -> bucket "purchase-invoice" (as you requested)
-      const invoicePath = `${orderNumber}.html`;
-      const purchasePath = `${orderNumber}.html`;
-
+      // 3) Upload invoices to storage as files (invoices, purchase-invoice)
       const invoiceBlob = new Blob([invoiceHTML], { type: "text/html" });
       const purchaseBlob = new Blob([purchaseHTML], { type: "text/html" });
 
-      const { error: uploadInvoiceErr } = await supabase.storage
-        .from("invoices")
-        .upload(invoicePath, invoiceBlob, { contentType: "text/html", upsert: true });
-
-      if (uploadInvoiceErr) {
-        console.warn("invoice upload error:", uploadInvoiceErr);
+      try {
+        await uploadToBucket("invoices", `${orderNumber}.html`, invoiceBlob, "text/html");
+      } catch (e) {
+        console.warn("Invoice upload failed:", e);
+      }
+      try {
+        await uploadToBucket("purchase-invoice", `${orderNumber}.html`, purchaseBlob, "text/html");
+      } catch (e) {
+        console.warn("Purchase invoice upload failed:", e);
       }
 
-      const { error: uploadPurchaseErr } = await supabase.storage
-        .from("purchase-invoice")
-        .upload(purchasePath, purchaseBlob, { contentType: "text/html", upsert: true });
-
-      if (uploadPurchaseErr) {
-        console.warn("purchase invoice upload error:", uploadPurchaseErr);
-      }
-
-      // 5) get public URLs (if buckets are public)
-      const { data: invoiceUrlData } = supabase.storage.from("invoices").getPublicUrl(invoicePath);
-      const invoicePublicUrl = invoiceUrlData?.publicUrl ?? null;
-
-      const { data: purchaseUrlData } = supabase.storage.from("purchase-invoice").getPublicUrl(purchasePath);
-      const purchasePublicUrl = purchaseUrlData?.publicUrl ?? null;
-
-      // 6) create order row and save invoice URLs (we won't put invoice data into order_items)
+      // 4) Create order row
       const { data: orderData, error: orderError } = await supabase
         .from("orders")
         .insert({
@@ -327,57 +255,56 @@ const CheckoutAI: React.FC = () => {
           payment_status: "paid",
           shipping_address_id: null,
           billing_address_id: null,
-          invoice_url: invoicePublicUrl,
-        //   purchase_invoice_url: purchasePublicUrl,
+          invoice_url: `/invoices/${orderNumber}.html`, // helpful reference; public URL retrieval depends on bucket being public
+          created_by: user.id,
           notes: aiDesignPublicUrl ? `AI design uploaded: ${aiDesignPublicUrl}` : (imageUrl ? `Original design: ${imageUrl}` : null),
-        })
+        } as any)
         .select("id, order_number")
         .single();
 
       if (orderError || !orderData) {
+        console.error("Order insert error:", orderError);
         throw new Error(orderError?.message || "Failed to create order");
       }
 
-      // 7) insert order_item(s) WITHOUT storing invoice content — only product info + design ref
-    //   const { error: itemError } = await supabase
-    //     .from("order_items")
-    //     .insert({
-    //       order_id: orderData.id,
-    //       product_id: null,
-    //       product_name: `Custom AI ${clothingType}`,
-    //       product_image: aiDesignPublicUrl ?? imageUrl,
-    //       quantity,
-    //       unit_price: price,
-    //       total_price: total,
-    //       size,
-    //       color,
-    //       item_type: "custom_ai",
-    //       design_id: aiGenerationId ?? null,
-    //       cloth_type: clothingType,
-    //       // metadata intentionally excludes invoice URLs; keep only prompt/design ref
-    //       metadata: {
-    //         prompt,
-    //         image_position: imagePosition,
-    //         ai_design_url: aiDesignPublicUrl ?? imageUrl ?? null,
-    //       },
-    //     });
+      // 5) Insert order_item record referencing product when available
+      const orderItemRow: any = {
+        order_id: orderData.id,
+        product_id: productIdToUse ?? null,
+        product_name: productIdToUse ? undefined : `Custom AI ${clothingType}`,
+        product_image: aiDesignPublicUrl ?? imageUrl,
+        quantity,
+        unit_price: price,
+        total_price: price * quantity,
+        size,
+        color,
+        item_type: "custom_ai",
+        design_id: aiGenerationId ?? null,
+        cloth_type: clothingType,
+        metadata: {
+          prompt,
+          image_position: imagePosition,
+          ai_design_url: aiDesignPublicUrl ?? imageUrl ?? null,
+        },
+        created_by: user.id,
+      };
 
-    //   if (itemError) {
-    //     throw new Error(itemError.message || "Failed to create order item");
-    //   }
+      const { error: itemError } = await supabase.from("order_items").insert(orderItemRow as any);
 
-      // 8) success: auto-download customer invoice and navigate to confirmation
-      // Auto-download both invoices
-        setTimeout(() => {
-        // download customer invoice
-        const customerBlob = new Blob([invoiceHTML], { type: "text/html" });
-        downloadBlob(customerBlob, `Invoice_${orderNumber}.html`);
+      if (itemError) {
+        console.error("order_items insert error:", itemError);
+        throw new Error(itemError.message || "Failed to create order item");
+      }
 
-        // download purchase/manufacturer invoice
-        const purchaseBlob = new Blob([purchaseHTML], { type: "text/html" });
-        downloadBlob(purchaseBlob, `Purchase_Invoice_${orderNumber}.html`);
-        }, 700);
-
+      // 6) Auto-download invoices locally for user convenience
+      setTimeout(() => {
+        try {
+          downloadBlob(new Blob([invoiceHTML], { type: "text/html" }), `Invoice_${orderNumber}.html`);
+          downloadBlob(new Blob([purchaseHTML], { type: "text/html" }), `PurchaseInvoice_${orderNumber}.html`);
+        } catch (e) {
+          console.warn("Failed to auto-download invoices:", e);
+        }
+      }, 600);
 
       toast.success("Order placed — design uploaded and invoices created.");
       navigate(`/order-confirmation/${orderData.order_number ?? orderNumber}`, { replace: true });
@@ -386,6 +313,7 @@ const CheckoutAI: React.FC = () => {
       toast.error(err?.message || "Failed to place order. Try again.");
     } finally {
       setIsPlacing(false);
+      toast.dismiss();
     }
   };
 
@@ -416,6 +344,7 @@ const CheckoutAI: React.FC = () => {
                 <div><strong>Prompt:</strong> {prompt ?? "—"}</div>
                 <div className="mt-1"><strong>Position:</strong> {imagePosition}</div>
                 <div className="mt-1"><strong>Design ID:</strong> {aiGenerationId ?? "—"}</div>
+                <div className="mt-1"><strong>Product ID (if existing):</strong> {existingProductId ?? "—"}</div>
               </div>
             </div>
 
@@ -478,7 +407,7 @@ const CheckoutAI: React.FC = () => {
             </div>
           </div>
         </div>
-      </div> 
+      </div>
     </div>
   );
 };

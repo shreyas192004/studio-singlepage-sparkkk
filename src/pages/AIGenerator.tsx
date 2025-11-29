@@ -1,3 +1,4 @@
+// src/pages/AIGenerator.tsx
 import { useState, useEffect } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { Search, User, ShoppingCart, Heart, Sparkles, Loader2, X, Eye } from "lucide-react";
@@ -135,6 +136,7 @@ export default function AIGenerator() {
     }
   }, [clothingType]);
 
+  // Close modal on Esc
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setShowLargeModal(false);
@@ -274,7 +276,159 @@ export default function AIGenerator() {
     }
   };
 
-  const handleBuy = () => {
+  // -------------------
+  // Helpers for saving design -> product
+  // -------------------
+  const uploadImageToStorage = async (imageUrl: string) => {
+    try {
+      const res = await fetch(imageUrl);
+      if (!res.ok) throw new Error("Failed to fetch generated image for upload");
+      const blob = await res.blob();
+
+      const filename = `ai_${user?.id ?? "anon"}_${Date.now()}.png`;
+      const bucket = "ai-designs";
+      const path = `${filename}`;
+
+      const upload = await supabase.storage.from(bucket).upload(path, blob, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: blob.type || "image/png",
+      });
+
+      if (upload.error) {
+        throw upload.error;
+      }
+
+      const { publicURL, error: urlErr } = supabase.storage.from(bucket).getPublicUrl(path);
+      if (urlErr) throw urlErr;
+
+      return { publicUrl: publicURL, path };
+    } catch (err: any) {
+      console.error("uploadImageToStorage error:", err);
+      throw err;
+    }
+  };
+
+  const createProductFromDesign = async (
+    imageUrl: string,
+    payload: { title?: string; description?: string; price?: number; ai_generation_id?: any }
+  ) => {
+    try {
+      const { publicUrl, path } = await uploadImageToStorage(imageUrl);
+
+      const sku = `AI-${Date.now()}`;
+      const title = payload.title ?? `AI Generated Design`;
+      const description = payload.description ?? `AI-generated design. Prompt: ${prompt.slice(0, 120)}`;
+      const price = payload.price ?? 1999;
+      const images = [publicUrl];
+
+      // NOTE: include clothing_type and image_position so the product row stores cloth type
+      const productInsertRow: any = {
+        sku,
+        title,
+        description,
+        price,
+        currency: "INR",
+        images,
+        images_generated_by_users: true,
+        designer_id: "ADMIN",
+        created_by: user?.id ?? null,
+        visibility: true,
+        date_added: new Date().toISOString(),
+        ai_generation_id: payload.ai_generation_id ?? null,
+        clothing_type: clothingType, // <-- ADDED: store clothing type
+        image_position: imagePosition, // <-- ADDED: store front/back information
+      };
+
+      const { data: product, error } = await supabase
+        .from("products")
+        .insert(productInsertRow as any) // cast to any to avoid TS issues if your types are narrower
+        .select("*")
+        .single();
+
+      if (error) {
+        console.error("createProductFromDesign insert error:", error);
+        throw error;
+      }
+
+      return { product, storagePath: path, publicUrl };
+    } catch (err) {
+      console.error("createProductFromDesign error:", err);
+      throw err;
+    }
+  };
+
+  // -------------------
+  // New flows: Add to cart / wishlist / buy
+  // -------------------
+  const handleAddToCart = async () => {
+    if (!generatedImage) return toast.error("No design to add to cart");
+    if (!user) {
+      toast.error("Please sign in to add to cart.");
+      setAuthOpen(true);
+      return;
+    }
+
+    try {
+      toast.loading("Saving design and creating product...");
+      const { product } = await createProductFromDesign(generatedImage, {
+        title: `AI Design — ${prompt.slice(0, 30)}`,
+        description: `AI design | Prompt: ${prompt}`,
+        price: 1999,
+        ai_generation_id: designRecord?.id ?? null,
+      });
+
+      addToCart({
+        id: product.id,
+        name: product.title,
+        price: product.price,
+        image: (product.images && product.images[0]) || generatedImage,
+        quantity: 1,
+      });
+
+      toast.success("Added custom design to cart");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to add to cart");
+    } finally {
+      toast.dismiss();
+    }
+  };
+
+  const handleAddToWishlist = async () => {
+    if (!generatedImage) return toast.error("No design to add to wishlist");
+    if (!user) {
+      toast.error("Please sign in to add to wishlist.");
+      setAuthOpen(true);
+      return;
+    }
+
+    try {
+      toast.loading("Saving design and creating product...");
+      const { product } = await createProductFromDesign(generatedImage, {
+        title: `AI Design — ${prompt.slice(0, 30)}`,
+        description: `AI design | Prompt: ${prompt}`,
+        price: 1999,
+        ai_generation_id: designRecord?.id ?? null,
+      });
+
+      addToWishlist({
+        id: product.id,
+        name: product.title,
+        price: product.price,
+        image: (product.images && product.images[0]) || generatedImage,
+      });
+
+      toast.success("Added design to wishlist");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to add to wishlist");
+    } finally {
+      toast.dismiss();
+    }
+  };
+
+  const handleBuy = async () => {
     if (!generatedImage) return toast.error("Generate a design before buying.");
     if (!user) {
       toast.error("Please sign in to place an order.");
@@ -282,88 +436,32 @@ export default function AIGenerator() {
       return;
     }
 
-    const payload = {
-      imageUrl: generatedImage,
-      prompt,
-      style,
-      colorScheme,
-      clothingType,
-      imagePosition,
-      ai_generation_id: designRecord?.id ?? null,
-    };
-
-    navigate("/checkout-ai", { state: payload });
-  };
-
-  const handleAddToWishlist = () => {
-    if (!generatedImage) return toast.error("No design to add to wishlist");
-    const shortPrompt = prompt.trim().substring(0, 30);
-    const titleExtra = designText ? ` — "${designText}"` : "";
-    const mockProduct = {
-      id: `ai_${Date.now()}`,
-      title: `AI Generated: ${shortPrompt}${titleExtra}`,
-      price: 1999,
-      images: [generatedImage],
-      category: "AI Generated",
-      description: `Custom AI-generated design: ${prompt}${designText ? ` | Text: "${designText}"` : ""}`,
-    };
-    addToWishlist(mockProduct as any);
-    toast.success("Added design to wishlist");
-  };
-
-  const handleAddToCart = () => {
-    if (!generatedImage) return toast.error("No design to add to cart");
-    if (!user) {
-      toast.error("Please sign in to add to cart.");
-      setAuthOpen(true);
-      return;
-    }
-    const shortPrompt = prompt.trim().substring(0, 30);
-    const titleExtra = designText ? ` — "${designText}"` : "";
-    const mockProduct = {
-      id: `ai_${Date.now()}`,
-      title: `AI Generated: ${shortPrompt}${titleExtra}`,
-      price: 1999,
-      images: [generatedImage],
-      category: "AI Generated",
-      description: `Custom AI-generated design: ${prompt}${designText ? ` | Text: "${designText}"` : ""}`,
-      cloth_type: clothingType,
-      image_position: imagePosition,
-      ai_generation_id: designRecord?.id ?? null,
-    };
-    addToCart(mockProduct as any);
-    toast.success("Added custom design to cart");
-  };
-
-  const handleSurveySubmit = async () => {
-    if (!surveyData.preferredStyle || !surveyData.preferredColorScheme || !surveyData.preferredClothingType) {
-      return toast.error("Please answer all questions");
-    }
     try {
-      const sessionId = user?.id || `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      await (supabase as any).from("user_preferences").insert({
-        user_id: user?.id || null,
-        session_id: sessionId,
-        preferred_style: surveyData.preferredStyle,
-        preferred_color_scheme: surveyData.preferredColorScheme,
-        preferred_clothing_type: surveyData.preferredClothingType,
+      toast.loading("Preparing checkout...");
+      const { product } = await createProductFromDesign(generatedImage, {
+        title: `AI Design — ${prompt.slice(0, 30)}`,
+        description: `AI design | Prompt: ${prompt}`,
+        price: 1999,
+        ai_generation_id: designRecord?.id ?? null,
       });
-      localStorage.setItem("survey_completed", "true");
-      setSurveyCompleted(true);
-      setShowSurvey(false);
-      toast.success("Thank you for your feedback!");
-    } catch (err) {
+
+      navigate("/checkout-ai", {
+        state: {
+          productId: product.id,
+          ai_generation_id: designRecord?.id ?? null,
+        },
+      });
+    } catch (err: any) {
       console.error(err);
-      toast.error("Failed to save preferences");
+      toast.error(err?.message || "Failed to prepare checkout");
+    } finally {
+      toast.dismiss();
     }
   };
 
-  const handleSurveySkip = () => {
-    localStorage.setItem("survey_completed", "true");
-    setSurveyCompleted(true);
-    setShowSurvey(false);
-  };
-
+  // -------------------
+  // UI: MockupPreview and main render (kept as your previous UI)
+  // -------------------
   const baseImageSrc = (() => {
     const mapping = BASE_IMAGES[clothingType];
     if (!mapping) return "/t-shirtFront.jpg";
@@ -604,7 +702,7 @@ export default function AIGenerator() {
       {showSurvey && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
           <div className="bg-card rounded-2xl shadow-2xl max-w-md w-full p-6 relative">
-            <button onClick={handleSurveySkip} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+            <button onClick={() => { localStorage.setItem("survey_completed", "true"); setShowSurvey(false); }} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
             <div className="mb-4">
               <div className="w-10 h-10 bg-sale-blue/10 rounded-full flex items-center justify-center mb-3"><Sparkles className="w-5 h-5 text-sale-blue" /></div>
               <h3 className="text-lg font-semibold mb-1">Help us personalize</h3>
@@ -659,8 +757,26 @@ export default function AIGenerator() {
             </div>
 
             <div className="mt-4 flex gap-3">
-              <Button variant="outline" onClick={handleSurveySkip} className="flex-1">Skip</Button>
-              <Button onClick={handleSurveySubmit} className="flex-1 bg-sale-blue hover:bg-sale-blue/90">Submit</Button>
+              <Button variant="outline" onClick={() => { localStorage.setItem("survey_completed", "true"); setShowSurvey(false); }} className="flex-1">Skip</Button>
+              <Button onClick={async () => {
+                try {
+                  const sessionId = user?.id || `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                  await (supabase as any).from("user_preferences").insert({
+                    user_id: user?.id || null,
+                    session_id: sessionId,
+                    preferred_style: surveyData.preferredStyle,
+                    preferred_color_scheme: surveyData.preferredColorScheme,
+                    preferred_clothing_type: surveyData.preferredClothingType,
+                  });
+                  localStorage.setItem("survey_completed", "true");
+                  setSurveyCompleted(true);
+                  setShowSurvey(false);
+                  toast.success("Thank you for your feedback!");
+                } catch (err) {
+                  console.error(err);
+                  toast.error("Failed to save preferences");
+                }
+              }} className="flex-1 bg-sale-blue hover:bg-sale-blue/90">Submit</Button>
             </div>
           </div>
         </div>
