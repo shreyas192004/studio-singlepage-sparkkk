@@ -173,7 +173,7 @@ export type Database = {
         Row: {
           created_at: string
           id: number
-          product_id: number
+          product_id: string
           quantity: number
           selected_color: string | null
           selected_size: string | null
@@ -182,7 +182,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: number
-          product_id: number
+          product_id: string
           quantity?: number
           selected_color?: string | null
           selected_size?: string | null
@@ -191,7 +191,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: number
-          product_id?: number
+          product_id?: string
           quantity?: number
           selected_color?: string | null
           selected_size?: string | null
@@ -632,21 +632,21 @@ export type Database = {
           created_at: string
           id: number
           metadata: Json | null
-          product_id: number
+          product_id: string
           user_id: string
         }
         Insert: {
           created_at?: string
           id?: number
           metadata?: Json | null
-          product_id: number
+          product_id: string
           user_id: string
         }
         Update: {
           created_at?: string
           id?: number
           metadata?: Json | null
-          product_id?: number
+          product_id?: string
           user_id?: string
         }
         Relationships: []
