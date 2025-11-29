@@ -160,6 +160,36 @@ export type Database = {
           },
         ]
       }
+      cart_items: {
+        Row: {
+          created_at: string
+          id: number
+          product_id: number
+          quantity: number
+          selected_color: string | null
+          selected_size: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          product_id: number
+          quantity?: number
+          selected_color?: string | null
+          selected_size?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          product_id?: number
+          quantity?: number
+          selected_color?: string | null
+          selected_size?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       designers: {
         Row: {
           avatar_url: string | null
@@ -327,8 +357,10 @@ export type Database = {
       }
       products: {
         Row: {
+          ai_generation_id: number | null
           brand: string | null
           category: string
+          clothing_type: string | null
           colors: string[] | null
           compare_at_price: number | null
           created_at: string | null
@@ -340,9 +372,11 @@ export type Database = {
           dimensions: string | null
           filter_requirements: Json | null
           id: string
+          image_position: string | null
           images: string[] | null
           images_generated_by_users: number | null
           inventory: Json | null
+          is_ai_generated: boolean | null
           material: string | null
           popularity: number | null
           price: number
@@ -357,8 +391,10 @@ export type Database = {
           weight: number | null
         }
         Insert: {
+          ai_generation_id?: number | null
           brand?: string | null
           category: string
+          clothing_type?: string | null
           colors?: string[] | null
           compare_at_price?: number | null
           created_at?: string | null
@@ -370,9 +406,11 @@ export type Database = {
           dimensions?: string | null
           filter_requirements?: Json | null
           id?: string
+          image_position?: string | null
           images?: string[] | null
           images_generated_by_users?: number | null
           inventory?: Json | null
+          is_ai_generated?: boolean | null
           material?: string | null
           popularity?: number | null
           price: number
@@ -387,8 +425,10 @@ export type Database = {
           weight?: number | null
         }
         Update: {
+          ai_generation_id?: number | null
           brand?: string | null
           category?: string
+          clothing_type?: string | null
           colors?: string[] | null
           compare_at_price?: number | null
           created_at?: string | null
@@ -400,9 +440,11 @@ export type Database = {
           dimensions?: string | null
           filter_requirements?: Json | null
           id?: string
+          image_position?: string | null
           images?: string[] | null
           images_generated_by_users?: number | null
           inventory?: Json | null
+          is_ai_generated?: boolean | null
           material?: string | null
           popularity?: number | null
           price?: number
@@ -470,6 +512,30 @@ export type Database = {
           created_at?: string | null
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wishlist_items: {
+        Row: {
+          created_at: string
+          id: number
+          metadata: Json | null
+          product_id: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          metadata?: Json | null
+          product_id: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          metadata?: Json | null
+          product_id?: number
           user_id?: string
         }
         Relationships: []
