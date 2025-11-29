@@ -12,6 +12,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useWishlist } from "@/contexts/WishlistContext";
 import { CartSidebar } from "@/components/CartSidebar";
 import { AuthDialog } from "@/components/AuthDialog";
+import LoginRequiredModal from "@/components/LoginRequiredModal";
+import GenerationLimitModal from "@/components/GenerationLimitModal";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -49,7 +51,7 @@ const SlideRotatingWords = ({ words, ms = 2000 }: { words: string[]; ms?: number
 };
 
 const FREE_USER_LIMIT = 2;
-const AUTHENTICATED_USER_LIMIT = 30;
+const AUTHENTICATED_USER_LIMIT = 20;
 
 const BASE_IMAGES: Record<string, { front?: string; back?: string }> = {
   "t-shirt": { front: "/t-shirtFront.jpg", back: "/t-shirtBack.jpg" },
@@ -114,6 +116,9 @@ export default function AIGenerator() {
   const [clothingType, setClothingType] = useState<ClothingType>("t-shirt");
   const [imagePosition, setImagePosition] = useState<ImagePosition>("front");
   const [showLargeModal, setShowLargeModal] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [userHasPurchased, setUserHasPurchased] = useState(false);
 
   const navigate = useNavigate();
 
@@ -126,7 +131,36 @@ export default function AIGenerator() {
 
     const surveyDone = localStorage.getItem("survey_completed");
     if (surveyDone === "true") setSurveyCompleted(true);
-  }, [searchParams]);
+
+    // Check if user has purchased before (to reset generation limit)
+    const checkUserStats = async () => {
+      if (user) {
+        try {
+          const { data, error } = await supabase
+            .from("user_generation_stats")
+            .select("*")
+            .eq("user_id", user.id)
+            .single();
+
+          if (!error && data) {
+            setGenerationCount(data.generation_count);
+            setUserHasPurchased(data.has_purchased);
+          } else {
+            // Create user stats if not exists
+            await supabase.from("user_generation_stats").insert({
+              user_id: user.id,
+              generation_count: 0,
+              has_purchased: false,
+            } as any);
+          }
+        } catch (err) {
+          console.error("Error fetching user stats:", err);
+        }
+      }
+    };
+
+    checkUserStats();
+  }, [searchParams, user]);
 
   useEffect(() => {
     if (clothingType === "polo") setImagePosition("back");
@@ -146,15 +180,15 @@ export default function AIGenerator() {
   }, [showLargeModal]);
 
   const handleGenerate = async () => {
-    if (!user && generationCount >= FREE_USER_LIMIT) {
-      toast.error(`You've reached the free generation limit of ${FREE_USER_LIMIT}. Please sign up to continue!`);
-      setAuthOpen(true);
+    // Check if user is logged in first
+    if (!user) {
+      setShowLoginModal(true);
       return;
     }
-    if (user && generationCount >= AUTHENTICATED_USER_LIMIT) {
-      toast.error(
-        `You've reached the generation limit of ${AUTHENTICATED_USER_LIMIT}. Please contact support for more.`,
-      );
+
+    // Check generation limit (20 for authenticated users)
+    if (generationCount >= AUTHENTICATED_USER_LIMIT && !userHasPurchased) {
+      setShowLimitModal(true);
       return;
     }
 
@@ -238,7 +272,19 @@ export default function AIGenerator() {
       const newCount = generationCount + 1;
       setGenerationCount(newCount);
 
-      if (!user) {
+      // Update generation count in database for authenticated users
+      if (user) {
+        try {
+          await supabase
+            .from("user_generation_stats")
+            .upsert({
+              user_id: user.id,
+              generation_count: newCount,
+            } as any, { onConflict: "user_id" });
+        } catch (err) {
+          console.error("Error updating generation count:", err);
+        }
+      } else {
         localStorage.setItem("generation_count", newCount.toString());
       }
 
@@ -301,10 +347,10 @@ export default function AIGenerator() {
         throw upload.error;
       }
 
-      const { publicURL, error: urlErr } = supabase.storage.from(bucket).getPublicUrl(path);
-      if (urlErr) throw urlErr;
+      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(path);
+      if (!urlData?.publicUrl) throw new Error("Failed to get public URL");
 
-      return { publicUrl: publicURL, path };
+      return { publicUrl: urlData.publicUrl, path };
     } catch (err: any) {
       console.error("uploadImageToStorage error:", err);
       throw err;
@@ -941,6 +987,22 @@ export default function AIGenerator() {
           </div>
         </div>
       )}
+
+      {/* Login Required Modal */}
+      <LoginRequiredModal
+        open={showLoginModal}
+        onOpenChange={setShowLoginModal}
+        title="Login Required"
+        description="Please login or create an account to generate AI designs."
+      />
+
+      {/* Generation Limit Modal */}
+      <GenerationLimitModal
+        open={showLimitModal}
+        onOpenChange={setShowLimitModal}
+        generationCount={generationCount}
+        limit={AUTHENTICATED_USER_LIMIT}
+      />
     </div>
   );
 }

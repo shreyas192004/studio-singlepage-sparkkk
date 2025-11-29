@@ -26,6 +26,7 @@ import AdminDesigners from "./pages/admin/AdminDesigners";
 import AdminDesignerForm from "./pages/admin/AdminDesignerForm";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import AdminOrders from "./pages/admin/AdminOrders";
+import AdminCoupons from "./pages/admin/AdminCoupons";
 import DesignerDetail from "./pages/DesignerDetail";
 import NotFound from "./pages/NotFound";
 import  {CheckoutPage } from "./pages/CheckOut";
@@ -82,6 +83,7 @@ const App = () => (
                   <Route path="/admintesora/designers/:id/edit" element={<AdminDesignerForm />} />
                   <Route path="/admintesora/analytics" element={<AdminAnalytics />} />
                   <Route path="/admintesora/orders" element={<AdminOrders />} />
+                  <Route path="/admintesora/coupons" element={<AdminCoupons />} />
                   <Route path="/designer/:id" element={<DesignerDetail />} />
 
                   {/* Designer routes */}

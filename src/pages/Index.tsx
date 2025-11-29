@@ -25,6 +25,7 @@ import { ProductFilters } from "@/components/ProductFilters";
 import { DesignersSection } from "@/components/DesignersSection";
 import HeroGenerator from "@/components/HeroGenerator";
 import RollingCounter from "@/components/RollingCounter";
+import DesignerOnboardForm from "@/components/DesignerOnboardForm";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -438,6 +439,17 @@ const Index: React.FC = () => {
 
       {/* Featured Designers */}
       <DesignersSection />
+
+      {/* Designer Onboard Section */}
+      <section className="container mx-auto px-4 py-12">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-bold mb-2">Join Our Designer Community</h2>
+          <p className="text-muted-foreground">Are you a designer? Showcase your creations to thousands of customers.</p>
+        </div>
+        <div className="flex justify-center">
+          <DesignerOnboardForm />
+        </div>
+      </section>
 
       {/* Footer */}
       <footer className="bg-primary text-primary-foreground mt-12">

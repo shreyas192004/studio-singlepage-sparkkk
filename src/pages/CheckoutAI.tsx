@@ -8,7 +8,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Tag, Percent } from "lucide-react";
 
 const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "XXL"];
 const COLOR_OPTIONS = ["white", "black", "red", "blue", "green", "yellow"];
@@ -21,7 +21,7 @@ type LocationState = {
   clothingType?: string;
   imagePosition?: string;
   ai_generation_id?: string | number | null;
-  productId?: number | null; // if AIGenerator already created product
+  productId?: string | null; // if AIGenerator already created product (UUID)
 };
 
 const CheckoutAI: React.FC = () => {
@@ -36,7 +36,7 @@ const CheckoutAI: React.FC = () => {
   const [clothingType, setClothingType] = useState<string>(payload.clothingType ?? "t-shirt");
   const [imagePosition, setImagePosition] = useState<string>(payload.imagePosition ?? "front");
   const [aiGenerationId, setAiGenerationId] = useState<string | number | null>(payload.ai_generation_id ?? null);
-  const [existingProductId] = useState<number | null>(payload.productId ?? null);
+  const [existingProductId] = useState<string | null>(payload.productId ?? null);
 
   const [size, setSize] = useState<string>("M");
   const [color, setColor] = useState<string>("black");
@@ -44,12 +44,119 @@ const CheckoutAI: React.FC = () => {
   const [price, setPrice] = useState<number>(1999); // base price, change as needed
   const [isPlacing, setIsPlacing] = useState(false);
 
+  // Coupon and discount states
+  const [couponCode, setCouponCode] = useState<string>("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number } | null>(null);
+  const [isFirstOrder, setIsFirstOrder] = useState(false);
+  const [firstOrderDiscount, setFirstOrderDiscount] = useState<number>(0);
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
+
   useEffect(() => {
     if (!imageUrl) {
       toast.error("No design found. Please generate a design first.");
       navigate("/ai-generator");
     }
-  }, [imageUrl, navigate]);
+
+    // Check if this is user's first order
+    const checkFirstOrder = async () => {
+      if (user) {
+        try {
+          const { data, error } = await supabase
+            .from("user_order_stats")
+            .select("*")
+            .eq("user_id", user.id)
+            .single();
+
+          if (error || !data) {
+            // No order stats means first order
+            setIsFirstOrder(true);
+          } else {
+            setIsFirstOrder(data.order_count === 0 && !data.first_order_discount_used);
+          }
+        } catch (err) {
+          console.error("Error checking first order:", err);
+          setIsFirstOrder(false);
+        }
+      }
+    };
+
+    checkFirstOrder();
+  }, [imageUrl, navigate, user]);
+
+  // Calculate first order discount (5% on orders > 4000)
+  useEffect(() => {
+    const subtotal = price * quantity;
+    if (isFirstOrder && subtotal > 4000) {
+      setFirstOrderDiscount(Math.round(subtotal * 0.05));
+    } else {
+      setFirstOrderDiscount(0);
+    }
+  }, [price, quantity, isFirstOrder]);
+
+  const applyCoupon = async () => {
+    if (!couponCode.trim()) {
+      toast.error("Please enter a coupon code");
+      return;
+    }
+
+    setApplyingCoupon(true);
+    try {
+      const { data, error } = await supabase
+        .from("coupon_codes")
+        .select("*")
+        .eq("code", couponCode.toUpperCase())
+        .eq("is_active", true)
+        .single();
+
+      if (error || !data) {
+        toast.error("Invalid coupon code");
+        return;
+      }
+
+      const coupon = data as any;
+      const now = new Date();
+      const validFrom = new Date(coupon.valid_from);
+      const validUntil = new Date(coupon.valid_until);
+
+      if (now < validFrom || now > validUntil) {
+        toast.error("Coupon has expired or is not yet valid");
+        return;
+      }
+
+      if (coupon.max_uses && coupon.current_uses >= coupon.max_uses) {
+        toast.error("Coupon usage limit reached");
+        return;
+      }
+
+      const subtotal = price * quantity;
+      if (subtotal < coupon.min_order_amount) {
+        toast.error(`Minimum order amount is ₹${coupon.min_order_amount} for this coupon`);
+        return;
+      }
+
+      setAppliedCoupon({
+        code: coupon.code,
+        discount: Number(coupon.discount_amount),
+      });
+      toast.success(`Coupon applied! ₹${coupon.discount_amount} discount`);
+    } catch (err) {
+      console.error("Error applying coupon:", err);
+      toast.error("Failed to apply coupon");
+    } finally {
+      setApplyingCoupon(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponCode("");
+    toast.success("Coupon removed");
+  };
+
+  // Calculate totals
+  const subtotal = price * quantity;
+  const totalDiscount = (appliedCoupon?.discount || 0) + firstOrderDiscount;
+  const finalTotal = Math.max(0, subtotal - totalDiscount);
 
   // ---------- helpers ----------
   const escapeHtml = (s?: string) => {
@@ -195,10 +302,10 @@ const CheckoutAI: React.FC = () => {
 
     try {
       const orderNumber = `ORD-${Date.now().toString().slice(-8)}`;
-      const total = price * quantity;
+      const total = finalTotal; // Use discounted total
 
       // 1) If product already exists (passed from generator), use it. Otherwise create product now.
-      let productIdToUse: number | null = existingProductId ?? null;
+      let productIdToUse: string | null = existingProductId ?? null;
       let aiDesignPublicUrl: string | null = null;
 
       if (!productIdToUse) {
@@ -382,21 +489,60 @@ const CheckoutAI: React.FC = () => {
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm text-muted-foreground">Price</div>
-                      <div className="text-xl font-bold">₹{price.toLocaleString()}</div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm text-muted-foreground">Subtotal</div>
+                        <div className="text-lg font-semibold">₹{subtotal.toLocaleString()}</div>
+                      </div>
                     </div>
-                    <div className="text-right">
+
+                    {/* Coupon Code */}
+                    <div className="border-t pt-4">
+                      <Label className="flex items-center gap-2 mb-2">
+                        <Tag className="w-4 h-4" /> Coupon Code
+                      </Label>
+                      {appliedCoupon ? (
+                        <div className="flex items-center justify-between bg-green-50 p-2 rounded-md">
+                          <span className="text-green-700 font-medium">{appliedCoupon.code} (-₹{appliedCoupon.discount})</span>
+                          <Button variant="ghost" size="sm" onClick={removeCoupon}>Remove</Button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Enter code (e.g. TESORA100)"
+                            value={couponCode}
+                            onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                            className="flex-1"
+                          />
+                          <Button onClick={applyCoupon} disabled={applyingCoupon} variant="outline">
+                            {applyingCoupon ? "..." : "Apply"}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* First Order Discount */}
+                    {isFirstOrder && subtotal > 4000 && (
+                      <div className="flex items-center justify-between text-green-600 bg-green-50 p-2 rounded-md">
+                        <span className="flex items-center gap-2">
+                          <Percent className="w-4 h-4" /> First Order (5% off)
+                        </span>
+                        <span>-₹{firstOrderDiscount}</span>
+                      </div>
+                    )}
+
+                    {/* Total */}
+                    <div className="border-t pt-4 flex items-center justify-between">
                       <div className="text-sm text-muted-foreground">Total</div>
-                      <div className="text-xl font-bold">₹{(price * quantity).toLocaleString()}</div>
+                      <div className="text-xl font-bold">₹{finalTotal.toLocaleString()}</div>
                     </div>
                   </div>
                 </div>
 
                 <div>
                   <Button onClick={placeOrder} className="w-full bg-sale-blue hover:bg-sale-blue/95 text-white" disabled={isPlacing}>
-                    {isPlacing ? "Placing order..." : `Place Order — ₹${(price * quantity).toLocaleString()}`}
+                    {isPlacing ? "Placing order..." : `Place Order — ₹${finalTotal.toLocaleString()}`}
                   </Button>
                 </div>
 
