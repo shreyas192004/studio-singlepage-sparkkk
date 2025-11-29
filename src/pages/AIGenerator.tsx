@@ -379,7 +379,7 @@ export default function AIGenerator() {
         currency: "INR",
         images,
         is_ai_generated: true,
-        designer_id: "f195bc24-5b94-4ddf-8664-dd156c80faf6",
+        designer_id: null,
         created_by: user?.id ?? null,
         visibility: "public",
         date_added: new Date().toISOString(),
