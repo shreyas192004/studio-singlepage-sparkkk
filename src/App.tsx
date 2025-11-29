@@ -38,6 +38,7 @@ import DesignerProducts from "./pages/designer/DesignerProducts";
 import DesignerAnalytics from "./pages/designer/DesignerAnalytics";
 import DesignerProductForm from "./pages/designer/DesignerProductForm";
 import DesignerOrders from "./pages/designer/DesignerOrders";
+import DesignerMyOrders from "./pages/designer/DesignerMyOrders";
 import DesignerPayment from "./pages/designer/DessignerPayment";
 import CheckoutAI from "./pages/CheckoutAI";
 import AllDesignersPage from "./pages/AllDesignersPage";
@@ -92,6 +93,7 @@ const App = () => (
                   <Route path="/designer/products" element={<DesignerProducts />} />
                   <Route path="/designer/analytics" element={<DesignerAnalytics />} />
                   <Route path="/designer/orders" element={<DesignerOrders />} />
+                  <Route path="/designer/my-orders" element={<DesignerMyOrders />} />
                   <Route path="/designer/payments" element={<DesignerPayment />} />
                 {/* For creating new products */}
                   <Route path="/designer/products/new" element={<DesignerProductForm />} />
