@@ -152,7 +152,9 @@ export default function AIGenerator() {
       return;
     }
     if (user && generationCount >= AUTHENTICATED_USER_LIMIT) {
-      toast.error(`You've reached the generation limit of ${AUTHENTICATED_USER_LIMIT}. Please contact support for more.`);
+      toast.error(
+        `You've reached the generation limit of ${AUTHENTICATED_USER_LIMIT}. Please contact support for more.`,
+      );
       return;
     }
 
@@ -311,7 +313,7 @@ export default function AIGenerator() {
 
   const createProductFromDesign = async (
     imageUrl: string,
-    payload: { title?: string; description?: string; price?: number; ai_generation_id?: any }
+    payload: { title?: string; description?: string; price?: number; ai_generation_id?: any },
   ) => {
     try {
       const { publicUrl, path } = await uploadImageToStorage(imageUrl);
@@ -331,7 +333,7 @@ export default function AIGenerator() {
         currency: "INR",
         images,
         images_generated_by_users: true,
-        designer_id: "ADMIN",
+        designer_id: "f195bc24-5b94-4ddf-8664-dd156c80faf6",
         created_by: user?.id ?? null,
         visibility: true,
         date_added: new Date().toISOString(),
@@ -468,10 +470,8 @@ export default function AIGenerator() {
     return (imagePosition === "back" ? mapping.back : mapping.front) ?? mapping.front;
   })();
 
-  const overlayPreset =
-    OVERLAY_PRESETS[clothingType]?.[imagePosition] ??
-    OVERLAY_PRESETS[clothingType]?.front ??
-    { widthPct: 55, leftPct: 22, topPct: 20 };
+  const overlayPreset = OVERLAY_PRESETS[clothingType]?.[imagePosition] ??
+    OVERLAY_PRESETS[clothingType]?.front ?? { widthPct: 55, leftPct: 22, topPct: 20 };
 
   const MockupPreview = () => (
     <div className="bg-card rounded-2xl p-6 shadow-sm border border-border sticky top-24 relative">
@@ -489,7 +489,12 @@ export default function AIGenerator() {
       </div>
 
       <div className="relative w-full rounded-lg overflow-hidden bg-muted" style={{ paddingTop: "100%" }}>
-        <img src={baseImageSrc} alt={`${clothingType} mockup ${imagePosition}`} className="absolute inset-0 w-full h-full object-cover" draggable={false} />
+        <img
+          src={baseImageSrc}
+          alt={`${clothingType} mockup ${imagePosition}`}
+          className="absolute inset-0 w-full h-full object-cover"
+          draggable={false}
+        />
 
         {generatedImage ? (
           <img
@@ -510,14 +515,20 @@ export default function AIGenerator() {
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground p-6">
             <Sparkles className="w-12 h-12 mb-3 opacity-60" />
-            <p className="text-center">Describe your idea and hit <span className="font-semibold">Generate</span></p>
+            <p className="text-center">
+              Describe your idea and hit <span className="font-semibold">Generate</span>
+            </p>
           </div>
         )}
       </div>
 
       {generatedImage && (
         <div className="mt-4 flex items-center gap-3">
-          <button onClick={handleAddToWishlist} className="p-2 rounded-md hover:bg-muted/60 transition" aria-label="Add to wishlist">
+          <button
+            onClick={handleAddToWishlist}
+            className="p-2 rounded-md hover:bg-muted/60 transition"
+            aria-label="Add to wishlist"
+          >
             <Heart className="w-5 h-5 text-muted-foreground" />
           </button>
 
@@ -526,7 +537,10 @@ export default function AIGenerator() {
             <span className="sr-only">Add to cart</span>
           </Button>
 
-          <Button onClick={handleBuy} className="ml-auto bg-sale-blue hover:bg-sale-blue/95 text-white font-semibold py-2 px-4">
+          <Button
+            onClick={handleBuy}
+            className="ml-auto bg-sale-blue hover:bg-sale-blue/95 text-white font-semibold py-2 px-4"
+          >
             Buy
           </Button>
 
@@ -537,7 +551,9 @@ export default function AIGenerator() {
       )}
 
       {!user && generationCount > 0 && (
-        <div className="mt-4 text-center text-sm text-muted-foreground">{generationCount}/{FREE_USER_LIMIT} free generations used</div>
+        <div className="mt-4 text-center text-sm text-muted-foreground">
+          {generationCount}/{FREE_USER_LIMIT} free generations used
+        </div>
       )}
     </div>
   );
@@ -547,21 +563,40 @@ export default function AIGenerator() {
       <nav className="sticky top-0 z-50 bg-primary/90 text-primary-foreground backdrop-blur-sm border-b border-border">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-            <Link to="/" className="text-lg font-bold tracking-wider">TESORA</Link>
+            <Link to="/" className="text-lg font-bold tracking-wider">
+              TESORA
+            </Link>
             <div className="hidden md:flex items-center gap-6">
-              <Link to="/" className="hover:text-accent transition">Shop</Link>
-              <Link to="/ai-generator" className="hover:text-accent transition">AI Generator</Link>
+              <Link to="/" className="hover:text-accent transition">
+                Shop
+              </Link>
+              <Link to="/ai-generator" className="hover:text-accent transition">
+                AI Generator
+              </Link>
             </div>
             <div className="flex items-center gap-3">
-              <button className="p-2 rounded-md hover:bg-muted/60 transition"><Search className="w-4 h-4" /></button>
-              <button className="p-2 rounded-md hover:bg-muted/60 transition"><User className="w-4 h-4" /></button>
-              <button onClick={() => setCartOpen(true)} className="relative p-2 rounded-md hover:bg-muted/60 transition">
+              <button className="p-2 rounded-md hover:bg-muted/60 transition">
+                <Search className="w-4 h-4" />
+              </button>
+              <button className="p-2 rounded-md hover:bg-muted/60 transition">
+                <User className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setCartOpen(true)}
+                className="relative p-2 rounded-md hover:bg-muted/60 transition"
+              >
                 <ShoppingCart className="w-4 h-4" />
                 {cartCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-accent text-accent-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center font-semibold">{cartCount}</span>
+                  <span className="absolute -top-2 -right-2 bg-accent text-accent-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center font-semibold">
+                    {cartCount}
+                  </span>
                 )}
               </button>
-              <Link to="/wishlist"><Button variant="ghost" size="icon"><Heart className="w-4 h-4" /></Button></Link>
+              <Link to="/wishlist">
+                <Button variant="ghost" size="icon">
+                  <Heart className="w-4 h-4" />
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
@@ -574,8 +609,15 @@ export default function AIGenerator() {
               <Sparkles className="w-4 h-4" />
               AI-Powered Design
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-2">Create your custom <span className="text-sale-blue"><SlideRotatingWords words={PRODUCT_WORDS} ms={2000} /></span></h1>
-            <p className="text-sm text-muted-foreground max-w-2xl mx-auto">Minimal, fast, and focused — design prints for apparel using AI.</p>
+            <h1 className="text-3xl md:text-4xl font-bold mb-2">
+              Create your custom{" "}
+              <span className="text-sale-blue">
+                <SlideRotatingWords words={PRODUCT_WORDS} ms={2000} />
+              </span>
+            </h1>
+            <p className="text-sm text-muted-foreground max-w-2xl mx-auto">
+              Minimal, fast, and focused — design prints for apparel using AI.
+            </p>
           </header>
 
           <div className="grid lg:grid-cols-2 gap-8 items-start">
@@ -588,21 +630,42 @@ export default function AIGenerator() {
 
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="prompt" className="text-sm font-semibold mb-2 block">Describe Your Design</Label>
-                    <Textarea id="prompt" placeholder="E.g., A futuristic robot playing guitar under neon lights..." value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={4} className="resize-none" />
+                    <Label htmlFor="prompt" className="text-sm font-semibold mb-2 block">
+                      Describe Your Design
+                    </Label>
+                    <Textarea
+                      id="prompt"
+                      placeholder="E.g., A futuristic robot playing guitar under neon lights..."
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      rows={4}
+                      className="resize-none"
+                    />
                   </div>
 
                   <div>
-                    <Label htmlFor="designText" className="text-sm font-semibold mb-2 block">Add Text <span className="text-muted-foreground text-xs">(optional)</span></Label>
-                    <Input id="designText" placeholder="e.g., 'Live Loud'" value={designText} onChange={(e) => setDesignText(e.target.value)} maxLength={120} />
-                    <p className="text-xs text-muted-foreground mt-1">This text will be included in your design if provided.</p>
+                    <Label htmlFor="designText" className="text-sm font-semibold mb-2 block">
+                      Add Text <span className="text-muted-foreground text-xs">(optional)</span>
+                    </Label>
+                    <Input
+                      id="designText"
+                      placeholder="e.g., 'Live Loud'"
+                      value={designText}
+                      onChange={(e) => setDesignText(e.target.value)}
+                      maxLength={120}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      This text will be included in your design if provided.
+                    </p>
                   </div>
 
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div>
                       <Label className="text-sm font-semibold mb-2 block">Style</Label>
                       <Select value={style} onValueChange={setStyle}>
-                        <SelectTrigger id="style"><SelectValue /></SelectTrigger>
+                        <SelectTrigger id="style">
+                          <SelectValue />
+                        </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="modern">Modern</SelectItem>
                           <SelectItem value="vintage">Vintage</SelectItem>
@@ -622,7 +685,9 @@ export default function AIGenerator() {
                     <div>
                       <Label className="text-sm font-semibold mb-2 block">Color Scheme</Label>
                       <Select value={colorScheme} onValueChange={setColorScheme}>
-                        <SelectTrigger id="colorScheme"><SelectValue /></SelectTrigger>
+                        <SelectTrigger id="colorScheme">
+                          <SelectValue />
+                        </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="normal">Normal</SelectItem>
                           <SelectItem value="vibrant">Vibrant</SelectItem>
@@ -643,7 +708,9 @@ export default function AIGenerator() {
                     <div>
                       <Label className="text-sm font-semibold mb-2 block">Clothing Type</Label>
                       <Select value={clothingType} onValueChange={(val) => setClothingType(val as ClothingType)}>
-                        <SelectTrigger id="clothingType"><SelectValue /></SelectTrigger>
+                        <SelectTrigger id="clothingType">
+                          <SelectValue />
+                        </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="t-shirt">T-Shirt</SelectItem>
                           <SelectItem value="polo">Polo</SelectItem>
@@ -656,7 +723,9 @@ export default function AIGenerator() {
                     <div>
                       <Label className="text-sm font-semibold mb-2 block">Position</Label>
                       <Select value={imagePosition} onValueChange={(val) => setImagePosition(val as ImagePosition)}>
-                        <SelectTrigger id="imagePosition"><SelectValue /></SelectTrigger>
+                        <SelectTrigger id="imagePosition">
+                          <SelectValue />
+                        </SelectTrigger>
                         <SelectContent>
                           {(clothingType === "t-shirt" || clothingType === "hoodie") && (
                             <>
@@ -672,8 +741,22 @@ export default function AIGenerator() {
                   </div>
 
                   <div>
-                    <Button onClick={handleGenerate} disabled={isGenerating} className="w-full bg-sale-blue hover:bg-sale-blue/90 text-white font-bold py-4 text-base">
-                      {isGenerating ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating...</>) : (<><Sparkles className="w-4 h-4 mr-2" />Generate Design</>)}
+                    <Button
+                      onClick={handleGenerate}
+                      disabled={isGenerating}
+                      className="w-full bg-sale-blue hover:bg-sale-blue/90 text-white font-bold py-4 text-base"
+                    >
+                      {isGenerating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 mr-2" />
+                          Generate Design
+                        </>
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -702,9 +785,19 @@ export default function AIGenerator() {
       {showSurvey && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
           <div className="bg-card rounded-2xl shadow-2xl max-w-md w-full p-6 relative">
-            <button onClick={() => { localStorage.setItem("survey_completed", "true"); setShowSurvey(false); }} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+            <button
+              onClick={() => {
+                localStorage.setItem("survey_completed", "true");
+                setShowSurvey(false);
+              }}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-5 h-5" />
+            </button>
             <div className="mb-4">
-              <div className="w-10 h-10 bg-sale-blue/10 rounded-full flex items-center justify-center mb-3"><Sparkles className="w-5 h-5 text-sale-blue" /></div>
+              <div className="w-10 h-10 bg-sale-blue/10 rounded-full flex items-center justify-center mb-3">
+                <Sparkles className="w-5 h-5 text-sale-blue" />
+              </div>
               <h3 className="text-lg font-semibold mb-1">Help us personalize</h3>
               <p className="text-sm text-muted-foreground">Choose a few preferences to improve recommendations.</p>
             </div>
@@ -712,8 +805,13 @@ export default function AIGenerator() {
             <div className="space-y-3">
               <div>
                 <Label className="text-sm font-semibold mb-2 block">Preferred Style</Label>
-                <Select value={surveyData.preferredStyle} onValueChange={(val) => setSurveyData({ ...surveyData, preferredStyle: val })}>
-                  <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                <Select
+                  value={surveyData.preferredStyle}
+                  onValueChange={(val) => setSurveyData({ ...surveyData, preferredStyle: val })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select..." />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="modern">Modern</SelectItem>
                     <SelectItem value="vintage">Vintage</SelectItem>
@@ -729,8 +827,13 @@ export default function AIGenerator() {
 
               <div>
                 <Label className="text-sm font-semibold mb-2 block">Preferred Colors</Label>
-                <Select value={surveyData.preferredColorScheme} onValueChange={(val) => setSurveyData({ ...surveyData, preferredColorScheme: val })}>
-                  <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                <Select
+                  value={surveyData.preferredColorScheme}
+                  onValueChange={(val) => setSurveyData({ ...surveyData, preferredColorScheme: val })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select..." />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="vibrant">Vibrant</SelectItem>
                     <SelectItem value="pastel">Pastel</SelectItem>
@@ -744,8 +847,13 @@ export default function AIGenerator() {
 
               <div>
                 <Label className="text-sm font-semibold mb-2 block">Preferred Clothing</Label>
-                <Select value={surveyData.preferredClothingType} onValueChange={(val) => setSurveyData({ ...surveyData, preferredClothingType: val })}>
-                  <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                <Select
+                  value={surveyData.preferredClothingType}
+                  onValueChange={(val) => setSurveyData({ ...surveyData, preferredClothingType: val })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select..." />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="t-shirt">T-Shirt</SelectItem>
                     <SelectItem value="polo">Polo</SelectItem>
@@ -757,26 +865,40 @@ export default function AIGenerator() {
             </div>
 
             <div className="mt-4 flex gap-3">
-              <Button variant="outline" onClick={() => { localStorage.setItem("survey_completed", "true"); setShowSurvey(false); }} className="flex-1">Skip</Button>
-              <Button onClick={async () => {
-                try {
-                  const sessionId = user?.id || `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                  await (supabase as any).from("user_preferences").insert({
-                    user_id: user?.id || null,
-                    session_id: sessionId,
-                    preferred_style: surveyData.preferredStyle,
-                    preferred_color_scheme: surveyData.preferredColorScheme,
-                    preferred_clothing_type: surveyData.preferredClothingType,
-                  });
+              <Button
+                variant="outline"
+                onClick={() => {
                   localStorage.setItem("survey_completed", "true");
-                  setSurveyCompleted(true);
                   setShowSurvey(false);
-                  toast.success("Thank you for your feedback!");
-                } catch (err) {
-                  console.error(err);
-                  toast.error("Failed to save preferences");
-                }
-              }} className="flex-1 bg-sale-blue hover:bg-sale-blue/90">Submit</Button>
+                }}
+                className="flex-1"
+              >
+                Skip
+              </Button>
+              <Button
+                onClick={async () => {
+                  try {
+                    const sessionId = user?.id || `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                    await (supabase as any).from("user_preferences").insert({
+                      user_id: user?.id || null,
+                      session_id: sessionId,
+                      preferred_style: surveyData.preferredStyle,
+                      preferred_color_scheme: surveyData.preferredColorScheme,
+                      preferred_clothing_type: surveyData.preferredClothingType,
+                    });
+                    localStorage.setItem("survey_completed", "true");
+                    setSurveyCompleted(true);
+                    setShowSurvey(false);
+                    toast.success("Thank you for your feedback!");
+                  } catch (err) {
+                    console.error(err);
+                    toast.error("Failed to save preferences");
+                  }
+                }}
+                className="flex-1 bg-sale-blue hover:bg-sale-blue/90"
+              >
+                Submit
+              </Button>
             </div>
           </div>
         </div>
@@ -787,19 +909,33 @@ export default function AIGenerator() {
           <div className="absolute inset-0 bg-black/70" onClick={() => setShowLargeModal(false)} />
 
           <div className="relative z-10 w-full max-w-[70vw] max-h-[80vh] flex flex-col items-center">
-            <button onClick={() => setShowLargeModal(false)} className="absolute -top-10 right-0 bg-card/90 backdrop-blur rounded-full p-2 hover:scale-105 transition"><X className="w-5 h-5" /></button>
+            <button
+              onClick={() => setShowLargeModal(false)}
+              className="absolute -top-10 right-0 bg-card/90 backdrop-blur rounded-full p-2 hover:scale-105 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
 
             <div className="bg-card rounded-xl shadow-2xl p-4 w-full flex flex-col items-center">
               <div className="flex items-center justify-between w-full mb-3">
                 <div className="text-sm text-muted-foreground">Preview</div>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={handleAddToCart} className="flex items-center gap-2"><ShoppingCart className="w-4 h-4" /> Add to Cart</Button>
-                  <Button size="sm" variant="ghost" onClick={handleAddToWishlist} className="flex items-center gap-2"><Heart className="w-4 h-4" /> Wishlist</Button>
+                  <Button size="sm" onClick={handleAddToCart} className="flex items-center gap-2">
+                    <ShoppingCart className="w-4 h-4" /> Add to Cart
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={handleAddToWishlist} className="flex items-center gap-2">
+                    <Heart className="w-4 h-4" /> Wishlist
+                  </Button>
                 </div>
               </div>
 
               <div className="flex items-center justify-center w-full">
-                <img src={generatedImage} alt="Large generated design" className="object-contain max-w-[65vw] max-h-[65vh] rounded-md" draggable={false} />
+                <img
+                  src={generatedImage}
+                  alt="Large generated design"
+                  className="object-contain max-w-[65vw] max-h-[65vh] rounded-md"
+                  draggable={false}
+                />
               </div>
             </div>
           </div>
