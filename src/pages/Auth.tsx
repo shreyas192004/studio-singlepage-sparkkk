@@ -6,11 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Sparkles, Mail, Lock, ArrowRight, ShoppingBag, Zap, Shield, TrendingUp } from "lucide-react";
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -20,6 +22,32 @@ const Auth = () => {
   useEffect(() => {
     if (user) navigate("/ai-generator");
   }, [user, navigate]);
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) {
+      toast.error("Please enter your email");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth?reset=true`,
+      });
+      if (error) {
+        toast.error(error.message);
+      } else {
+        toast.success("Password reset link sent to your email!");
+        setIsForgotPassword(false);
+      }
+    } catch (err) {
+      toast.error("Failed to send reset email");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,28 +200,54 @@ const Auth = () => {
             </div>
 
             {/* Email form */}
-            <form onSubmit={handleSubmit} className="space-y-4 animate-fade-in" style={{ animationDelay: "0.5s" }}>
-              <div className="space-y-2">
-                <Label htmlFor="email" className="flex items-center gap-2 text-foreground">
-                  <Mail className="w-4 h-4" /> Email
-                </Label>
-                <Input id="email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 text-base" disabled={loading} required />
-              </div>
+            {isForgotPassword ? (
+              <form onSubmit={handleForgotPassword} className="space-y-4 animate-fade-in" style={{ animationDelay: "0.5s" }}>
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="flex items-center gap-2 text-foreground">
+                    <Mail className="w-4 h-4" /> Email
+                  </Label>
+                  <Input id="email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 text-base" disabled={loading} required />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password" className="flex items-center gap-2 text-foreground">
-                  <Lock className="w-4 h-4" /> Password
-                </Label>
-                <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 text-base" disabled={loading} required minLength={6} />
-              </div>
+                <Button type="submit" className="w-full h-12 text-base font-semibold bg-gradient-to-r from-primary to-accent" disabled={loading}>
+                  {loading ? <div className="flex items-center gap-2"><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />Sending...</div> : "Send Reset Link"}
+                </Button>
 
-              <Button type="submit" className="w-full h-12 text-base font-semibold bg-gradient-to-r from-primary to-accent" disabled={loading}>
-                {loading ? <div className="flex items-center gap-2"><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />{isLogin ? "Signing in..." : "Creating account..."}</div> : <div className="flex items-center gap-2">{isLogin ? "Sign In" : "Create Account"}<ArrowRight className="w-5 h-5" /></div>}
-              </Button>
-            </form>
+                <Button type="button" variant="ghost" onClick={() => setIsForgotPassword(false)} className="w-full">
+                  Back to Login
+                </Button>
+              </form>
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4 animate-fade-in" style={{ animationDelay: "0.5s" }}>
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="flex items-center gap-2 text-foreground">
+                    <Mail className="w-4 h-4" /> Email
+                  </Label>
+                  <Input id="email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 text-base" disabled={loading} required />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password" className="flex items-center gap-2 text-foreground">
+                      <Lock className="w-4 h-4" /> Password
+                    </Label>
+                    {isLogin && (
+                      <Button type="button" variant="link" className="text-xs p-0 h-auto" onClick={() => setIsForgotPassword(true)}>
+                        Forgot password?
+                      </Button>
+                    )}
+                  </div>
+                  <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 text-base" disabled={loading} required minLength={6} />
+                </div>
+
+                <Button type="submit" className="w-full h-12 text-base font-semibold bg-gradient-to-r from-primary to-accent" disabled={loading}>
+                  {loading ? <div className="flex items-center gap-2"><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />{isLogin ? "Signing in..." : "Creating account..."}</div> : <div className="flex items-center gap-2">{isLogin ? "Sign In" : "Create Account"}<ArrowRight className="w-5 h-5" /></div>}
+                </Button>
+              </form>
+            )}
 
             <div className="text-center space-y-4">
-              <Button type="button" variant="ghost" onClick={() => setIsLogin((s) => !s)} className="w-full">
+              <Button type="button" variant="ghost" onClick={() => { setIsLogin((s) => !s); setIsForgotPassword(false); }} className="w-full">
                 {isLogin ? <>Don't have an account? <span className="text-primary ml-1">Sign up</span></> : <>Already have an account? <span className="text-primary ml-1">Sign in</span></>}
               </Button>
             </div>

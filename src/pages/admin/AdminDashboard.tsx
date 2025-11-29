@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useAdmin } from "@/contexts/AdminContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, Users, BarChart3, LogOut, ShoppingCart } from "lucide-react";
+import { Package, Users, BarChart3, LogOut, ShoppingCart, Ticket } from "lucide-react";
 
 const AdminDashboard = () => {
   const { isAdmin, loading, signOut } = useAdmin();
@@ -97,6 +97,21 @@ const AdminDashboard = () => {
               <CardContent>
                 <p className="text-sm text-muted-foreground">
                   Track clicks, purchases, and user engagement across the platform.
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link to="/admintesora/coupons">
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+              <CardHeader>
+                <Ticket className="h-8 w-8 mb-2 text-primary" />
+                <CardTitle>Coupons</CardTitle>
+                <CardDescription>Manage discount codes</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Create and manage coupon codes like TESORA100, TESORA500, etc.
                 </p>
               </CardContent>
             </Card>
