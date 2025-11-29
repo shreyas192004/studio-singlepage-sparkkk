@@ -1,11 +1,11 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CreditCard, Download } from 'lucide-react';
+import { ArrowLeft, CreditCard, Download, Tag, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCart } from '@/contexts/CartContext';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -34,6 +34,110 @@ export const CheckoutPage = () => {
   const [orderId, setOrderId] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Coupon and discount states
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number } | null>(null);
+  const [isFirstOrder, setIsFirstOrder] = useState(false);
+  const [firstOrderDiscount, setFirstOrderDiscount] = useState(0);
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
+
+  // Check first order status
+  useEffect(() => {
+    const checkFirstOrder = async () => {
+      if (user) {
+        try {
+          const { data, error } = await supabase
+            .from('user_order_stats')
+            .select('*')
+            .eq('user_id', user.id)
+            .single();
+
+          if (error || !data) {
+            setIsFirstOrder(true);
+          } else {
+            setIsFirstOrder(data.order_count === 0 && !data.first_order_discount_used);
+          }
+        } catch (err) {
+          console.error('Error checking first order:', err);
+          setIsFirstOrder(false);
+        }
+      }
+    };
+    checkFirstOrder();
+  }, [user]);
+
+  // Calculate first order discount (5% on orders > 4000)
+  useEffect(() => {
+    if (isFirstOrder && cartTotal > 4000) {
+      setFirstOrderDiscount(Math.round(cartTotal * 0.05));
+    } else {
+      setFirstOrderDiscount(0);
+    }
+  }, [cartTotal, isFirstOrder]);
+
+  const applyCoupon = async () => {
+    if (!couponCode.trim()) {
+      toast.error('Please enter a coupon code');
+      return;
+    }
+
+    setApplyingCoupon(true);
+    try {
+      const { data, error } = await supabase
+        .from('coupon_codes')
+        .select('*')
+        .eq('code', couponCode.toUpperCase())
+        .eq('is_active', true)
+        .single();
+
+      if (error || !data) {
+        toast.error('Invalid coupon code');
+        return;
+      }
+
+      const coupon = data as any;
+      const now = new Date();
+      const validFrom = new Date(coupon.valid_from);
+      const validUntil = new Date(coupon.valid_until);
+
+      if (now < validFrom || now > validUntil) {
+        toast.error('Coupon has expired or is not yet valid');
+        return;
+      }
+
+      if (coupon.max_uses && coupon.current_uses >= coupon.max_uses) {
+        toast.error('Coupon usage limit reached');
+        return;
+      }
+
+      if (cartTotal < coupon.min_order_amount) {
+        toast.error(`Minimum order amount is ₹${coupon.min_order_amount} for this coupon`);
+        return;
+      }
+
+      setAppliedCoupon({
+        code: coupon.code,
+        discount: Number(coupon.discount_amount),
+      });
+      toast.success(`Coupon applied! ₹${coupon.discount_amount} discount`);
+    } catch (err) {
+      console.error('Error applying coupon:', err);
+      toast.error('Failed to apply coupon');
+    } finally {
+      setApplyingCoupon(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponCode('');
+    toast.success('Coupon removed');
+  };
+
+  // Calculate totals
+  const totalDiscount = (appliedCoupon?.discount || 0) + firstOrderDiscount;
+  const finalTotal = Math.max(0, cartTotal - totalDiscount);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -128,18 +232,63 @@ export const CheckoutPage = () => {
         .insert({
           user_id: user!.id,
           order_number: newOrderId,
-          total_amount: cartTotal,
+          total_amount: finalTotal,
           status: 'pending',
           payment_status: 'pending',
           payment_method: 'cash_on_delivery',
           shipping_address_id: addressData.id,
           billing_address_id: addressData.id,
           invoice_url: urlData.publicUrl,
+          notes: appliedCoupon ? `Coupon: ${appliedCoupon.code} (-₹${appliedCoupon.discount})${firstOrderDiscount > 0 ? `, First Order Discount (-₹${firstOrderDiscount})` : ''}` : (firstOrderDiscount > 0 ? `First Order Discount (-₹${firstOrderDiscount})` : null),
         })
         .select()
         .single();
 
       if (orderError) throw orderError;
+
+      // Update coupon usage if coupon was applied
+      if (appliedCoupon) {
+        const { data: couponData } = await supabase
+          .from('coupon_codes')
+          .select('current_uses')
+          .eq('code', appliedCoupon.code)
+          .single();
+        
+        if (couponData) {
+          await supabase
+            .from('coupon_codes')
+            .update({ current_uses: couponData.current_uses + 1 })
+            .eq('code', appliedCoupon.code);
+        }
+      }
+
+      // Update first order discount tracking if used
+      if (firstOrderDiscount > 0 && user) {
+        const { data: existingStats } = await supabase
+          .from('user_order_stats')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+
+        if (existingStats) {
+          await supabase
+            .from('user_order_stats')
+            .update({ 
+              first_order_discount_used: true,
+              order_count: existingStats.order_count + 1,
+              updated_at: new Date().toISOString()
+            })
+            .eq('user_id', user.id);
+        } else {
+          await supabase
+            .from('user_order_stats')
+            .insert({
+              user_id: user.id,
+              order_count: 1,
+              first_order_discount_used: true,
+            });
+        }
+      }
 
       // Insert order items
       const orderItems = cart.map(item => ({
@@ -326,13 +475,25 @@ export const CheckoutPage = () => {
               <td>Subtotal:</td>
               <td class="text-right">Rs ${cartTotal.toFixed(2)}</td>
             </tr>
+            ${appliedCoupon ? `
+            <tr style="color: #16a34a;">
+              <td>Coupon (${appliedCoupon.code}):</td>
+              <td class="text-right">-Rs ${appliedCoupon.discount.toFixed(2)}</td>
+            </tr>
+            ` : ''}
+            ${firstOrderDiscount > 0 ? `
+            <tr style="color: #16a34a;">
+              <td>First Order Discount (5%):</td>
+              <td class="text-right">-Rs ${firstOrderDiscount.toFixed(2)}</td>
+            </tr>
+            ` : ''}
             <tr>
               <td>Shipping:</td>
               <td class="text-right">Free</td>
             </tr>
             <tr class="total-row">
               <td>Total:</td>
-              <td class="text-right">Rs ${cartTotal.toFixed(2)}</td>
+              <td class="text-right">Rs ${finalTotal.toFixed(2)}</td>
             </tr>
           </table>
         </div>
@@ -510,7 +671,7 @@ export const CheckoutPage = () => {
                 className="w-full bg-accent text-accent-foreground hover:bg-accent/90 h-12 text-lg"
                 disabled={isProcessing}
               >
-                {isProcessing ? 'Processing...' : `Place Order - Rs ${cartTotal.toFixed(2)}`}
+                {isProcessing ? 'Processing...' : `Place Order - Rs ${finalTotal.toFixed(2)}`}
               </Button>
             </form>
           </div>
@@ -538,9 +699,24 @@ export const CheckoutPage = () => {
                 
                 <div>
                   <h4 className="font-semibold mb-2">Order Summary:</h4>
-                  <p className="text-sm text-muted-foreground">
-                    {cart.length} item(s) - Total: Rs {cartTotal.toFixed(2)}
-                  </p>
+                  <div className="text-sm space-y-1">
+                    <p className="text-muted-foreground">
+                      {cart.length} item(s) - Subtotal: Rs {cartTotal.toFixed(2)}
+                    </p>
+                    {appliedCoupon && (
+                      <p className="text-green-600">
+                        Coupon ({appliedCoupon.code}): -Rs {appliedCoupon.discount.toFixed(2)}
+                      </p>
+                    )}
+                    {firstOrderDiscount > 0 && (
+                      <p className="text-green-600">
+                        First Order Discount: -Rs {firstOrderDiscount.toFixed(2)}
+                      </p>
+                    )}
+                    <p className="font-semibold text-foreground pt-1 border-t">
+                      Total: Rs {finalTotal.toFixed(2)}
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -595,18 +771,63 @@ export const CheckoutPage = () => {
                 </div>
               </ScrollArea>
 
+              {/* Coupon Input */}
+              <div className="border-t pt-4 mb-4">
+                <Label className="text-sm font-medium mb-2 block">Have a coupon?</Label>
+                {appliedCoupon ? (
+                  <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2">
+                      <Tag className="w-4 h-4 text-green-600" />
+                      <span className="font-medium text-green-700">{appliedCoupon.code}</span>
+                      <span className="text-green-600">(-₹{appliedCoupon.discount})</span>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={removeCoupon}>
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Enter coupon code"
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={applyCoupon}
+                      disabled={applyingCoupon}
+                    >
+                      {applyingCoupon ? 'Applying...' : 'Apply'}
+                    </Button>
+                  </div>
+                )}
+              </div>
+
               <div className="border-t pt-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
                   <span>Rs {cartTotal.toFixed(2)}</span>
                 </div>
+                {appliedCoupon && (
+                  <div className="flex justify-between text-sm text-green-600">
+                    <span>Coupon ({appliedCoupon.code})</span>
+                    <span>-Rs {appliedCoupon.discount.toFixed(2)}</span>
+                  </div>
+                )}
+                {firstOrderDiscount > 0 && (
+                  <div className="flex justify-between text-sm text-green-600">
+                    <span>First Order Discount (5%)</span>
+                    <span>-Rs {firstOrderDiscount.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Shipping</span>
                   <span>Free</span>
                 </div>
                 <div className="flex justify-between text-lg font-bold pt-2 border-t">
                   <span>Total</span>
-                  <span>Rs {cartTotal.toFixed(2)}</span>
+                  <span>Rs {finalTotal.toFixed(2)}</span>
                 </div>
               </div>
             </div>

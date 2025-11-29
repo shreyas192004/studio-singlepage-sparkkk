@@ -52,9 +52,35 @@ const CheckoutAI: React.FC = () => {
   const [applyingCoupon, setApplyingCoupon] = useState(false);
 
   useEffect(() => {
+    // Try to restore design from sessionStorage if not passed via state
     if (!imageUrl) {
-      toast.error("No design found. Please generate a design first.");
-      navigate("/ai-generator");
+      const savedDesign = sessionStorage.getItem("ai_design_data");
+      if (savedDesign) {
+        try {
+          const parsed = JSON.parse(savedDesign);
+          setImageUrl(parsed.imageUrl);
+          setPrompt(parsed.prompt || "");
+          setClothingType(parsed.clothingType || "t-shirt");
+          setImagePosition(parsed.imagePosition || "front");
+          setAiGenerationId(parsed.ai_generation_id || null);
+        } catch (e) {
+          console.error("Failed to parse saved design:", e);
+          toast.error("No design found. Please generate a design first.");
+          navigate("/ai-generator");
+        }
+      } else {
+        toast.error("No design found. Please generate a design first.");
+        navigate("/ai-generator");
+      }
+    } else {
+      // Save current design to sessionStorage
+      sessionStorage.setItem("ai_design_data", JSON.stringify({
+        imageUrl,
+        prompt,
+        clothingType,
+        imagePosition,
+        ai_generation_id: aiGenerationId,
+      }));
     }
 
     // Check if this is user's first order
@@ -68,7 +94,6 @@ const CheckoutAI: React.FC = () => {
             .single();
 
           if (error || !data) {
-            // No order stats means first order
             setIsFirstOrder(true);
           } else {
             setIsFirstOrder(data.order_count === 0 && !data.first_order_discount_used);
@@ -382,8 +407,7 @@ const CheckoutAI: React.FC = () => {
           payment_status: "paid",
           shipping_address_id: null,
           billing_address_id: null,
-          invoice_url: `/invoices/${orderNumber}.html`, // helpful reference; public URL retrieval depends on bucket being public
-          created_by: user.id,
+          invoice_url: `/invoices/${orderNumber}.html`,
           notes: aiDesignPublicUrl ? `AI design uploaded: ${aiDesignPublicUrl}` : (imageUrl ? `Original design: ${imageUrl}` : null),
         } as any)
         .select("id, order_number")
