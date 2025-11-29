@@ -411,7 +411,7 @@ export type Database = {
       }
       products: {
         Row: {
-          ai_generation_id: number | null
+          ai_generation_id: string | null
           brand: string | null
           category: string
           clothing_type: string | null
@@ -445,7 +445,7 @@ export type Database = {
           weight: number | null
         }
         Insert: {
-          ai_generation_id?: number | null
+          ai_generation_id?: string | null
           brand?: string | null
           category: string
           clothing_type?: string | null
@@ -479,7 +479,7 @@ export type Database = {
           weight?: number | null
         }
         Update: {
-          ai_generation_id?: number | null
+          ai_generation_id?: string | null
           brand?: string | null
           category?: string
           clothing_type?: string | null
