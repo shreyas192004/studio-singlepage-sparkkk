@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useAdmin } from "@/contexts/AdminContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, Users, BarChart3, LogOut, ShoppingCart, Ticket } from "lucide-react";
+import { Package, Users, BarChart3, LogOut, ShoppingCart, Ticket, CreditCard } from "lucide-react";
 
 const AdminDashboard = () => {
   const { isAdmin, loading, signOut } = useAdmin();
@@ -127,6 +127,21 @@ const AdminDashboard = () => {
               <CardContent>
                 <p className="text-sm text-muted-foreground">
                   View and manage all AI-generated orders.
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link to="/admintesora/designer-payments">
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+              <CardHeader>
+                <CreditCard className="h-8 w-8 mb-2 text-primary" />
+                <CardTitle>Designer Payments</CardTitle>
+                <CardDescription>Manage designer payouts</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  View designer earnings, process payments, and track payment history.
                 </p>
               </CardContent>
             </Card>
