@@ -6,6 +6,7 @@ import { useCart } from "@/contexts/CartContext";
 import { toast } from "sonner";
 import { useState } from "react";
 import { CartSidebar } from "@/components/CartSidebar";
+import Logo from "../../public/logo.png";
 
 
 
@@ -30,8 +31,12 @@ const Wishlist = () => {
       <nav className="sticky top-0 z-50 bg-primary text-primary-foreground">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <Link to="/" className="text-xl font-bold tracking-wider">
-              TESORA
+            <Link to="/" className="text-lg md:text-xl font-bold tracking-wider">
+              <img
+                className="w-24 h-10 object-contain cursor-pointer"
+                src={Logo}
+                alt="Tesora Logo"
+              />
             </Link>
             <div className="hidden md:flex items-center gap-8">
               <Link to="/" className="hover:text-accent transition-colors">Shop</Link>

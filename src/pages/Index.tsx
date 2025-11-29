@@ -35,6 +35,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import Logo from "../../public/logo.png";
 
 const Index: React.FC = () => {
   const { cartCount } = useCart();
@@ -64,7 +65,8 @@ const Index: React.FC = () => {
         const { data, error } = await supabase
           .from("products")
           .select("*")
-          .eq("visibility", "public");
+          .eq("visibility", "public")
+          .eq("is_ai_generated", false);
 
         if (error) {
           console.error("Error fetching products:", error);
@@ -175,7 +177,11 @@ const Index: React.FC = () => {
               </button>
 
               <Link to="/" className="text-lg md:text-xl font-bold tracking-wider">
-                TESORA
+                <img
+                  className="w-24 h-10 object-contain cursor-pointer"
+                  src={Logo}
+                  alt="Tesora Logo"
+                />
               </Link>
             </div>
 

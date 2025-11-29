@@ -16,6 +16,7 @@ import LoginRequiredModal from "@/components/LoginRequiredModal";
 import GenerationLimitModal from "@/components/GenerationLimitModal";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import Logo from "../../public/logo.png";
 
 const PRODUCT_WORDS = ["T-Shirt", "Hoodie", "POLO", "Top"];
 
@@ -656,9 +657,13 @@ export default function AIGenerator() {
       <nav className="sticky top-0 z-50 bg-primary/90 text-primary-foreground backdrop-blur-sm border-b border-border">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-            <Link to="/" className="text-lg font-bold tracking-wider">
-              TESORA
-            </Link>
+             <Link to="/" className="text-lg md:text-xl font-bold tracking-wider">
+                <img
+                  className="w-24 h-10 object-contain cursor-pointer"
+                  src={Logo}
+                  alt="Tesora Logo"
+                />
+              </Link>
             <div className="hidden md:flex items-center gap-6">
               <Link to="/" className="hover:text-accent transition">
                 Shop
