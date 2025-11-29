@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useDesigner } from "@/contexts/DesignerContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, Users, BarChart3, LogOut } from "lucide-react";
+import { Package, Users, BarChart3, LogOut, ShoppingBag, CreditCard } from "lucide-react";
 
 const DesignerDashboard = () => {
   const { isDesigner, loading, signOut } = useDesigner();
@@ -61,12 +61,27 @@ const DesignerDashboard = () => {
             <Card className="hover:shadow-lg transition-shadow cursor-pointer">
               <CardHeader>
                 <Users className="h-8 w-8 mb-2 text-primary" />
-                <CardTitle>Orders</CardTitle>
-                <CardDescription>Manage designer profiles</CardDescription>
+                <CardTitle>Sales Summary</CardTitle>
+                <CardDescription>View product sales overview</CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground">
-                  view and manage customer orders, track order status, and handle returns.
+                  Track total sales and revenue for each of your products.
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link to="/designer/my-orders">
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+              <CardHeader>
+                <ShoppingBag className="h-8 w-8 mb-2 text-primary" />
+                <CardTitle>My Orders</CardTitle>
+                <CardDescription>View orders with your products</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  See all orders containing your products, download invoices and purchase orders.
                 </p>
               </CardContent>
             </Card>
@@ -90,13 +105,13 @@ const DesignerDashboard = () => {
           <Link to="/designer/payments">
             <Card className="hover:shadow-lg transition-shadow cursor-pointer">
               <CardHeader>
-                <BarChart3 className="h-8 w-8 mb-2 text-primary" />
+                <CreditCard className="h-8 w-8 mb-2 text-primary" />
                 <CardTitle>Payment</CardTitle>
-                <CardDescription>View insights and metrics</CardDescription>
+                <CardDescription>View payment details</CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground">
-                  Track clicks, purchases, and user engagement across the platform.
+                  Track your earnings and payment history.
                 </p>
               </CardContent>
             </Card>
