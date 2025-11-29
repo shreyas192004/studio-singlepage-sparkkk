@@ -216,8 +216,10 @@ const AdminAIGeneratedOrders = () => {
         <tr>
           <td style="padding: 12px; border: 1px solid #ddd;">
             <strong>${escapeHtml(item.product_name)}</strong>
-            ${item.size ? `<br>Size: ${escapeHtml(item.size)}` : ""}
-            ${item.color ? `<br>Color: ${escapeHtml(item.color)}` : ""}
+            ${item.clothing_type ? `<br><span style="background:#e3f2fd;padding:2px 6px;border-radius:4px;font-size:12px;">Cloth: ${escapeHtml(item.clothing_type)}</span>` : ""}
+            ${item.size ? `<br>Size: <strong>${escapeHtml(item.size)}</strong>` : ""}
+            ${item.color ? `<br>Color: <strong>${escapeHtml(item.color)}</strong>` : ""}
+            ${item.image_position ? `<br><span style="font-size:11px;color:#666;">Image Position: ${escapeHtml(item.image_position)}</span>` : ""}
           </td>
           <td style="padding: 12px; border: 1px solid #ddd; text-align: center; font-size: 18px; font-weight: bold;">${item.quantity}</td>
           <td style="padding: 12px; border: 1px solid #ddd;">

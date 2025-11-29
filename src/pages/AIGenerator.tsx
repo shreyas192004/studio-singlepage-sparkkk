@@ -533,12 +533,19 @@ export default function AIGenerator() {
       return;
     }
 
-    // For buy flow, open variant modal then navigate to checkout after product creation
-    setVariantAction("cart");
-    setVariantModalOpen(true);
-
-    // After confirm, product will be added to cart — user can checkout from cart or you can auto-redirect
-    // (We intentionally don't auto-redirect here to let the user confirm size/color first.)
+    // Navigate directly to CheckoutAI with all design details
+    navigate("/checkout-ai", {
+      state: {
+        imageUrl: generatedImage,
+        prompt,
+        style,
+        colorScheme,
+        clothingType,
+        imagePosition,
+        ai_generation_id: designRecord?.id ?? null,
+        productId: null, // Product will be created during checkout
+      },
+    });
   };
 
   // -------------------
