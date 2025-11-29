@@ -378,14 +378,14 @@ export default function AIGenerator() {
         price,
         currency: "INR",
         images,
-        images_generated_by_users: true,
+        is_ai_generated: true,
         designer_id: "f195bc24-5b94-4ddf-8664-dd156c80faf6",
         created_by: user?.id ?? null,
-        visibility: true,
+        visibility: "public",
         date_added: new Date().toISOString(),
-        ai_generation_id: payload.ai_generation_id ?? null,
-        clothing_type: clothingType, // <-- ADDED: store clothing type
-        image_position: imagePosition, // <-- ADDED: store front/back information
+        category: "AI Generated",
+        clothing_type: clothingType,
+        image_position: imagePosition,
       };
 
       const { data: product, error } = await supabase
