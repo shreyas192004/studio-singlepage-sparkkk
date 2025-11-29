@@ -533,16 +533,22 @@ export default function AIGenerator() {
       return;
     }
 
+    // Save design to sessionStorage for persistence when navigating back
+    const designData = {
+      imageUrl: generatedImage,
+      prompt,
+      style,
+      colorScheme,
+      clothingType,
+      imagePosition,
+      ai_generation_id: designRecord?.id ?? null,
+    };
+    sessionStorage.setItem("ai_design_data", JSON.stringify(designData));
+
     // Navigate directly to CheckoutAI with all design details
     navigate("/checkout-ai", {
       state: {
-        imageUrl: generatedImage,
-        prompt,
-        style,
-        colorScheme,
-        clothingType,
-        imagePosition,
-        ai_generation_id: designRecord?.id ?? null,
+        ...designData,
         productId: null, // Product will be created during checkout
       },
     });
