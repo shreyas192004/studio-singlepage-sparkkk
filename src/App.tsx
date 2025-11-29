@@ -42,6 +42,7 @@ import DesignerMyOrders from "./pages/designer/DesignerMyOrders";
 import DesignerPayment from "./pages/designer/DessignerPayment";
 import CheckoutAI from "./pages/CheckoutAI";
 import AllDesignersPage from "./pages/AllDesignersPage";
+import AdminAIGeneratedOrders from "./pages/admin/AdminAIGeneratedOrders";
 
 const queryClient = new QueryClient();
 
@@ -86,6 +87,7 @@ const App = () => (
                   <Route path="/admintesora/orders" element={<AdminOrders />} />
                   <Route path="/admintesora/coupons" element={<AdminCoupons />} />
                   <Route path="/designer/:id" element={<DesignerDetail />} />
+                  <Route path="/admintesora/AI-Orders" element={<AdminAIGeneratedOrders />} />
 
                   {/* Designer routes */}
                   <Route path="/designer/login" element={<DesignerLogin />} />

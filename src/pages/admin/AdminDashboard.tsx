@@ -116,6 +116,21 @@ const AdminDashboard = () => {
               </CardContent>
             </Card>
           </Link>
+
+          <Link to="/admintesora/AI-Orders">
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+              <CardHeader>
+                <Ticket className="h-8 w-8 mb-2 text-primary" />
+                <CardTitle>AI Orders</CardTitle>
+                <CardDescription>Manage AI-generated orders</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  View and manage all AI-generated orders.
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
       </main>
     </div>

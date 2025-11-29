@@ -120,6 +120,14 @@ export default function AIGenerator() {
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [userHasPurchased, setUserHasPurchased] = useState(false);
 
+  // Variant modal state
+  const [variantModalOpen, setVariantModalOpen] = useState(false);
+  const [variantAction, setVariantAction] = useState<"cart" | "wishlist" | null>(null);
+  const [availableSizes] = useState(["XS", "S", "M", "L", "XL", "XXL"]);
+  const [availableColors] = useState(["Black", "White", "Navy Blue", "Pastel Pink"]);
+  const [selectedSize, setSelectedSize] = useState<string | null>("M");
+  const [selectedColor, setSelectedColor] = useState<string | null>("Black");
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -277,10 +285,13 @@ export default function AIGenerator() {
         try {
           await supabase
             .from("user_generation_stats")
-            .upsert({
-              user_id: user.id,
-              generation_count: newCount,
-            } as any, { onConflict: "user_id" });
+            .upsert(
+              {
+                user_id: user.id,
+                generation_count: newCount,
+              } as any,
+              { onConflict: "user_id" }
+            );
         } catch (err) {
           console.error("Error updating generation count:", err);
         }
@@ -359,7 +370,14 @@ export default function AIGenerator() {
 
   const createProductFromDesign = async (
     imageUrl: string,
-    payload: { title?: string; description?: string; price?: number; ai_generation_id?: any },
+    payload: {
+      title?: string;
+      description?: string;
+      price?: number;
+      ai_generation_id?: any;
+      selected_size?: string | null;
+      selected_color?: string | null;
+    }
   ) => {
     try {
       const { publicUrl, path } = await uploadImageToStorage(imageUrl);
@@ -370,27 +388,46 @@ export default function AIGenerator() {
       const price = payload.price ?? 1999;
       const images = [publicUrl];
 
-      // NOTE: include clothing_type and image_position so the product row stores cloth type
+      // Map selected_size/color into the schema fields: sizes (array) and colors (array)
+      // Fill other schema fields that you listed (id is auto, compare_at_price null, currency, images, category, sizes/colors etc.)
       const productInsertRow: any = {
         sku,
         title,
         description,
         price,
+        compare_at_price: null,
         currency: "INR",
         images,
-        is_ai_generated: true,
-        designer_id: null,
-        created_by: user?.id ?? null,
-        visibility: "public",
-        date_added: new Date().toISOString(),
+        images_generated_by_users: false,
         category: "AI Generated",
+        sub_category: null,
+        tags: [],
+        colors: payload.selected_color ? [payload.selected_color] : [],
+        sizes: payload.selected_size ? [payload.selected_size] : [],
+        material: null,
+        brand: null,
+        designer_id: null,
+        inventory: 1, // default 1 for single made-on-demand product; change if needed
+        weight: null,
+        dimensions: null,
+        created_by: user?.id ?? null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        visibility: "public",
+        structured_card_data: null,
+        filter_requirements: null,
+        popularity: 0,
+        date_added: new Date().toISOString(),
+        // Keep your custom metadata for clothing rendering
         clothing_type: clothingType,
         image_position: imagePosition,
+        ai_generation_id: payload.ai_generation_id ?? null,
+        is_ai_generated: true,
       };
 
       const { data: product, error } = await supabase
         .from("products")
-        .insert(productInsertRow as any) // cast to any to avoid TS issues if your types are narrower
+        .insert(productInsertRow as any)
         .select("*")
         .single();
 
@@ -417,30 +454,9 @@ export default function AIGenerator() {
       return;
     }
 
-    try {
-      toast.loading("Saving design and creating product...");
-      const { product } = await createProductFromDesign(generatedImage, {
-        title: `AI Design — ${prompt.slice(0, 30)}`,
-        description: `AI design | Prompt: ${prompt}`,
-        price: 1999,
-        ai_generation_id: designRecord?.id ?? null,
-      });
-
-      addToCart({
-        id: product.id,
-        name: product.title,
-        price: product.price,
-        image: (product.images && product.images[0]) || generatedImage,
-        quantity: 1,
-      });
-
-      toast.success("Added custom design to cart");
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.message || "Failed to add to cart");
-    } finally {
-      toast.dismiss();
-    }
+    // open variant modal for cart flow
+    setVariantAction("cart");
+    setVariantModalOpen(true);
   };
 
   const handleAddToWishlist = async () => {
@@ -451,28 +467,64 @@ export default function AIGenerator() {
       return;
     }
 
+    // open variant modal for wishlist flow
+    setVariantAction("wishlist");
+    setVariantModalOpen(true);
+  };
+
+  // Confirm handlers (called when user selects size/color in modal)
+  const handleConfirmVariant = async () => {
+    if (!generatedImage) return toast.error("No design to save");
+    if (!user) {
+      toast.error("Please sign in first");
+      setAuthOpen(true);
+      return;
+    }
+
+    setVariantModalOpen(false);
+    const payload = {
+      title: `AI Design — ${prompt.slice(0, 30)}`,
+      description: `AI design | Prompt: ${prompt}`,
+      price: 1999,
+      ai_generation_id: designRecord?.id ?? null,
+      selected_size: selectedSize,
+      selected_color: selectedColor,
+    };
+
     try {
       toast.loading("Saving design and creating product...");
-      const { product } = await createProductFromDesign(generatedImage, {
-        title: `AI Design — ${prompt.slice(0, 30)}`,
-        description: `AI design | Prompt: ${prompt}`,
-        price: 1999,
-        ai_generation_id: designRecord?.id ?? null,
-      });
+      const { product } = await createProductFromDesign(generatedImage, payload as any);
 
-      addToWishlist({
-        id: product.id,
-        name: product.title,
-        price: product.price,
-        image: (product.images && product.images[0]) || generatedImage,
-      });
-
-      toast.success("Added design to wishlist");
+      if (variantAction === "cart") {
+        addToCart({
+          id: product.id,
+          name: product.title,
+          price: product.price,
+          image: (product.images && product.images[0]) || generatedImage,
+          quantity: 1,
+          selected_size: selectedSize,
+          selected_color: selectedColor,
+        } as any);
+        toast.success("Added custom design to cart");
+      } else if (variantAction === "wishlist") {
+        addToWishlist({
+          id: product.id,
+          name: product.title,
+          price: product.price,
+          image: (product.images && product.images[0]) || generatedImage,
+          selected_size: selectedSize,
+          selected_color: selectedColor,
+        } as any);
+        toast.success("Added design to wishlist");
+      }
     } catch (err: any) {
       console.error(err);
-      toast.error(err?.message || "Failed to add to wishlist");
+      toast.error(err?.message || "Failed to save design");
     } finally {
       toast.dismiss();
+      setVariantAction(null);
+      setSelectedSize("M");
+      setSelectedColor("Black");
     }
   };
 
@@ -484,27 +536,12 @@ export default function AIGenerator() {
       return;
     }
 
-    try {
-      toast.loading("Preparing checkout...");
-      const { product } = await createProductFromDesign(generatedImage, {
-        title: `AI Design — ${prompt.slice(0, 30)}`,
-        description: `AI design | Prompt: ${prompt}`,
-        price: 1999,
-        ai_generation_id: designRecord?.id ?? null,
-      });
+    // For buy flow, open variant modal then navigate to checkout after product creation
+    setVariantAction("cart");
+    setVariantModalOpen(true);
 
-      navigate("/checkout-ai", {
-        state: {
-          productId: product.id,
-          ai_generation_id: designRecord?.id ?? null,
-        },
-      });
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.message || "Failed to prepare checkout");
-    } finally {
-      toast.dismiss();
-    }
+    // After confirm, product will be added to cart — user can checkout from cart or you can auto-redirect
+    // (We intentionally don't auto-redirect here to let the user confirm size/color first.)
   };
 
   // -------------------
@@ -827,6 +864,64 @@ export default function AIGenerator() {
 
       <CartSidebar open={cartOpen} onClose={() => setCartOpen(false)} />
       <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
+
+      {/* Variant modal for selecting size/color before saving product */}
+      {variantModalOpen && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setVariantModalOpen(false)} />
+
+          <div className="relative z-10 bg-card rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold">Choose size & color</h3>
+                <div className="text-sm text-muted-foreground">Select a size and color for your product</div>
+              </div>
+              <button onClick={() => setVariantModalOpen(false)} className="text-muted-foreground">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-semibold mb-2 block z-500">Size</Label>
+                <Select value={selectedSize ?? undefined} onValueChange={(v) => setSelectedSize(v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select size" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[10003]">
+                    {availableSizes.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-sm font-semibold mb-2 block ">Color</Label>
+                <Select value={selectedColor ?? undefined} onValueChange={(v) => setSelectedColor(v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select color" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[10003]">
+                    {availableColors.map((c) => (
+                      <SelectItem  key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setVariantModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button className="flex-1 bg-sale-blue" onClick={handleConfirmVariant}>
+                Confirm & Save
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showSurvey && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
