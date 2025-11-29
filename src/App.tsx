@@ -39,6 +39,7 @@ import DesignerProductForm from "./pages/designer/DesignerProductForm";
 import DesignerOrders from "./pages/designer/DesignerOrders";
 import DesignerPayment from "./pages/designer/DessignerPayment";
 import CheckoutAI from "./pages/CheckoutAI";
+import AllDesignersPage from "./pages/AllDesignersPage";
 
 const queryClient = new QueryClient();
 
@@ -68,6 +69,7 @@ const App = () => (
                   <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
                   <Route path="/shipping-and-refund-policy" element={<ShippingAndRefundPolicy />} />
                   <Route path="/checkout-ai" element={<CheckoutAI />} />
+                  <Route path="/designers" element={<AllDesignersPage />} />
                   
                   {/* Hidden Admin Routes */}
                   <Route path="/admintesora" element={<AdminLogin />} />

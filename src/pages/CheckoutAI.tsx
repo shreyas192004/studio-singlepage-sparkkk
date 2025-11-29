@@ -1,4 +1,3 @@
-// src/pages/CheckoutAI.tsx
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Label } from "@/components/ui/label";
@@ -368,10 +367,17 @@ const CheckoutAI: React.FC = () => {
     //   }
 
       // 8) success: auto-download customer invoice and navigate to confirmation
-      setTimeout(() => {
-        const blob = new Blob([invoiceHTML], { type: "text/html" });
-        downloadBlob(blob, `Invoice_${orderNumber}.html`);
-      }, 300);
+      // Auto-download both invoices
+        setTimeout(() => {
+        // download customer invoice
+        const customerBlob = new Blob([invoiceHTML], { type: "text/html" });
+        downloadBlob(customerBlob, `Invoice_${orderNumber}.html`);
+
+        // download purchase/manufacturer invoice
+        const purchaseBlob = new Blob([purchaseHTML], { type: "text/html" });
+        downloadBlob(purchaseBlob, `Purchase_Invoice_${orderNumber}.html`);
+        }, 700);
+
 
       toast.success("Order placed — design uploaded and invoices created.");
       navigate(`/order-confirmation/${orderData.order_number ?? orderNumber}`, { replace: true });

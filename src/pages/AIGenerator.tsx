@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
-import { Search, User, ShoppingCart, Heart, Sparkles, Loader2, Download, X } from "lucide-react";
+import { Search, User, ShoppingCart, Heart, Sparkles, Loader2, X, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,9 +37,10 @@ const SlideRotatingWords = ({ words, ms = 2000 }: { words: string[]; ms?: number
       style={{
         transition: "opacity 300ms ease, transform 300ms ease",
         opacity: visible ? 1 : 0,
-        transform: visible ? "translateY(0)" : "translateY(-8px)",
+        transform: visible ? "translateY(0)" : "translateY(-6px)",
         display: "inline-block",
       }}
+      className="font-semibold"
     >
       {words[i]}
     </span>
@@ -82,9 +83,9 @@ const OVERLAY_PRESETS: Record<
 type ClothingType = "t-shirt" | "polo" | "hoodie" | "tops";
 type ImagePosition = "front" | "back";
 
-const AIGenerator = () => {
+export default function AIGenerator() {
   const [searchParams] = useSearchParams();
-  const { cartCount } = useCart();
+  const { cartCount, addToCart } = useCart();
   const { user } = useAuth();
   const { addToWishlist } = useWishlist();
   const [cartOpen, setCartOpen] = useState(false);
@@ -99,7 +100,7 @@ const AIGenerator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationCount, setGenerationCount] = useState(0);
   const [designText, setDesignText] = useState("");
-  const [designRecord, setDesignRecord] = useState<any | null>(null); // store returned ai_generations row (if available)
+  const [designRecord, setDesignRecord] = useState<any | null>(null);
 
   const [showSurvey, setShowSurvey] = useState(false);
   const [surveyCompleted, setSurveyCompleted] = useState(false);
@@ -111,8 +112,6 @@ const AIGenerator = () => {
 
   const [clothingType, setClothingType] = useState<ClothingType>("t-shirt");
   const [imagePosition, setImagePosition] = useState<ImagePosition>("front");
-
-  // NEW: modal state for showing large design
   const [showLargeModal, setShowLargeModal] = useState(false);
 
   const navigate = useNavigate();
@@ -136,7 +135,6 @@ const AIGenerator = () => {
     }
   }, [clothingType]);
 
-  // Close modal on Esc
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setShowLargeModal(false);
@@ -184,11 +182,7 @@ const AIGenerator = () => {
         body.text = trimmedText;
       }
 
-      console.log("Invoking generate-tshirt-design with body:", body);
-
       const { data, error } = await supabase.functions.invoke("generate-tshirt-design", { body });
-
-      console.log("generate-tshirt-design response:", { data, error });
 
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -196,7 +190,6 @@ const AIGenerator = () => {
 
       setGeneratedImage(data.imageUrl);
 
-      // insert into ai_generations and capture returned row (so we can reference later)
       const insertResp = await (supabase as any)
         .from("ai_generations")
         .insert({
@@ -213,11 +206,8 @@ const AIGenerator = () => {
         .select("*")
         .single();
 
-      if (insertResp.error) {
-        // not fatal — still let user use it
-        console.warn("Failed to persist ai_generations:", insertResp.error);
-      } else {
-        setDesignRecord(insertResp.data); // capture persisted record
+      if (!insertResp.error) {
+        setDesignRecord(insertResp.data);
       }
 
       if (user) {
@@ -250,7 +240,7 @@ const AIGenerator = () => {
 
       const surveyAlreadyCompleted = localStorage.getItem("survey_completed") === "true";
       if (!surveyAlreadyCompleted && newCount === 1) {
-        setTimeout(() => setShowSurvey(true), 1500);
+        setTimeout(() => setShowSurvey(true), 1200);
       }
 
       setDesignText("");
@@ -284,7 +274,6 @@ const AIGenerator = () => {
     }
   };
 
-  // Buy handler - navigate to checkout page with minimal state
   const handleBuy = () => {
     if (!generatedImage) return toast.error("Generate a design before buying.");
     if (!user) {
@@ -293,7 +282,6 @@ const AIGenerator = () => {
       return;
     }
 
-    // prepare payload: prefer persisted ai_generations row if available
     const payload = {
       imageUrl: generatedImage,
       prompt,
@@ -307,48 +295,44 @@ const AIGenerator = () => {
     navigate("/checkout-ai", { state: payload });
   };
 
-  const handleDownload = () => {
-    if (!generatedImage) return;
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height + 60;
-      if (ctx) {
-        ctx.drawImage(img, 0, 0);
-        ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-        ctx.fillRect(0, img.height, canvas.width, 60);
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 28px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText("tesoralifestyle", canvas.width / 2, img.height + 40);
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `tesoralifestyle-design-${Date.now()}.png`;
-            a.click();
-            URL.revokeObjectURL(url);
-            toast.success("Design downloaded with watermark!");
-          }
-        });
-      }
+  const handleAddToWishlist = () => {
+    if (!generatedImage) return toast.error("No design to add to wishlist");
+    const shortPrompt = prompt.trim().substring(0, 30);
+    const titleExtra = designText ? ` — "${designText}"` : "";
+    const mockProduct = {
+      id: `ai_${Date.now()}`,
+      title: `AI Generated: ${shortPrompt}${titleExtra}`,
+      price: 1999,
+      images: [generatedImage],
+      category: "AI Generated",
+      description: `Custom AI-generated design: ${prompt}${designText ? ` | Text: "${designText}"` : ""}`,
     };
-    img.src = generatedImage;
+    addToWishlist(mockProduct as any);
+    toast.success("Added design to wishlist");
   };
 
-  // direct download original (no watermark)
-  const handleDownloadOriginal = () => {
-    if (!generatedImage) return;
-    const a = document.createElement("a");
-    a.href = generatedImage;
-    a.download = `tesora-design-${Date.now()}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const handleAddToCart = () => {
+    if (!generatedImage) return toast.error("No design to add to cart");
+    if (!user) {
+      toast.error("Please sign in to add to cart.");
+      setAuthOpen(true);
+      return;
+    }
+    const shortPrompt = prompt.trim().substring(0, 30);
+    const titleExtra = designText ? ` — "${designText}"` : "";
+    const mockProduct = {
+      id: `ai_${Date.now()}`,
+      title: `AI Generated: ${shortPrompt}${titleExtra}`,
+      price: 1999,
+      images: [generatedImage],
+      category: "AI Generated",
+      description: `Custom AI-generated design: ${prompt}${designText ? ` | Text: "${designText}"` : ""}`,
+      cloth_type: clothingType,
+      image_position: imagePosition,
+      ai_generation_id: designRecord?.id ?? null,
+    };
+    addToCart(mockProduct as any);
+    toast.success("Added custom design to cart");
   };
 
   const handleSurveySubmit = async () => {
@@ -392,20 +376,28 @@ const AIGenerator = () => {
     { widthPct: 55, leftPct: 22, topPct: 20 };
 
   const MockupPreview = () => (
-    <div className="bg-card rounded-xl p-6 shadow-lg border border-border sticky top-24">
-      <h2 className="text-2xl font-bold mb-6">Design Preview</h2>
-      <div className="relative w-full rounded-lg overflow-hidden bg-muted" style={{ paddingTop: "100%" }}>
-        <img
-          src={baseImageSrc}
-          alt={`${clothingType} mockup ${imagePosition}`}
-          className="absolute inset-0 w-full h-full object-cover"
-          draggable={false}
-        />
+    <div className="bg-card rounded-2xl p-6 shadow-sm border border-border sticky top-24 relative">
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h2 className="text-lg font-semibold">Design Preview</h2>
+          <div className="text-sm text-muted-foreground">Live mockup of your design</div>
+        </div>
         {generatedImage && (
+          <Button onClick={() => setShowLargeModal(true)} variant="ghost" size="sm" className="flex items-center gap-2">
+            <Eye className="w-4 h-4" />
+            <span className="hidden sm:inline text-sm">Preview</span>
+          </Button>
+        )}
+      </div>
+
+      <div className="relative w-full rounded-lg overflow-hidden bg-muted" style={{ paddingTop: "100%" }}>
+        <img src={baseImageSrc} alt={`${clothingType} mockup ${imagePosition}`} className="absolute inset-0 w-full h-full object-cover" draggable={false} />
+
+        {generatedImage ? (
           <img
             src={generatedImage}
             alt="generated design overlay"
-            className="absolute cursor-pointer"
+            className="absolute cursor-pointer transition-transform duration-150 hover:scale-105"
             style={{
               width: `${overlayPreset.widthPct}%`,
               left: `${overlayPreset.leftPct}%`,
@@ -417,241 +409,209 @@ const AIGenerator = () => {
             crossOrigin="anonymous"
             onClick={() => setShowLargeModal(true)}
           />
-        )}
-        {!generatedImage && (
+        ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground p-6">
-            <Sparkles className="w-16 h-16 mb-4 opacity-50" />
-            <p className="text-center">Your design will appear here</p>
+            <Sparkles className="w-12 h-12 mb-3 opacity-60" />
+            <p className="text-center">Describe your idea and hit <span className="font-semibold">Generate</span></p>
           </div>
         )}
       </div>
+
       {generatedImage && (
-        <div className="mt-6 space-y-3">
-          <Button onClick={handleDownload} className="w-full" size="lg">
-            <Download className="w-5 h-5 mr-2" />
-            Download with Watermark
+        <div className="mt-4 flex items-center gap-3">
+          <button onClick={handleAddToWishlist} className="p-2 rounded-md hover:bg-muted/60 transition" aria-label="Add to wishlist">
+            <Heart className="w-5 h-5 text-muted-foreground" />
+          </button>
+
+          <Button onClick={handleAddToCart} variant="outline" size="sm" className="flex items-center gap-2">
+            <ShoppingCart className="w-4 h-4" />
+            <span className="sr-only">Add to cart</span>
           </Button>
 
-          {/* BUY BUTTON ADDED */}
-          <Button onClick={handleBuy} className="w-full bg-sale-blue hover:bg-sale-blue/95 text-white font-bold py-4 text-lg">
-            <Sparkles className="w-5 h-5 mr-2" />
-            Buy Custom {clothingType.toUpperCase()}
+          <Button onClick={handleBuy} className="ml-auto bg-sale-blue hover:bg-sale-blue/95 text-white font-semibold py-2 px-4">
+            Buy
           </Button>
 
-          <Button variant="outline" size="lg" onClick={() => setShowLargeModal(true)} className="w-full">
-            View Larger
-          </Button>
-          <Button variant="ghost" size="lg" onClick={handleGenerate} className="w-full">
+          <Button variant="ghost" size="sm" onClick={handleGenerate} className="text-muted-foreground">
             Regenerate
           </Button>
         </div>
       )}
+
       {!user && generationCount > 0 && (
-        <div className="mt-4 text-center text-sm text-muted-foreground">
-          {generationCount}/{FREE_USER_LIMIT} free generations used
-        </div>
+        <div className="mt-4 text-center text-sm text-muted-foreground">{generationCount}/{FREE_USER_LIMIT} free generations used</div>
       )}
     </div>
   );
 
   return (
     <div className="min-h-screen bg-background">
-      <nav className="sticky top-0 z-50 bg-primary text-primary-foreground">
-        <div className="container mx-auto px-4 py-4">
+      <nav className="sticky top-0 z-50 bg-primary/90 text-primary-foreground backdrop-blur-sm border-b border-border">
+        <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-            <Link to="/" className="text-xl font-bold tracking-wider">TESORA</Link>
-            <div className="hidden md:flex items-center gap-8">
-              <Link to="/" className="hover:text-accent transition-colors">Shop</Link>
-              <Link to="/ai-generator" className="hover:text-accent transition-colors">AI Generator</Link>
+            <Link to="/" className="text-lg font-bold tracking-wider">TESORA</Link>
+            <div className="hidden md:flex items-center gap-6">
+              <Link to="/" className="hover:text-accent transition">Shop</Link>
+              <Link to="/ai-generator" className="hover:text-accent transition">AI Generator</Link>
             </div>
-            <div className="flex items-center gap-4">
-              <button className="hover:text-accent transition-colors"><Search className="w-5 h-5" /></button>
-              <button className="hover:text-accent transition-colors"><User className="w-5 h-5" /></button>
-              <button onClick={() => setCartOpen(true)} className="hover:text-accent transition-colors relative">
-                <ShoppingCart className="w-5 h-5" />
+            <div className="flex items-center gap-3">
+              <button className="p-2 rounded-md hover:bg-muted/60 transition"><Search className="w-4 h-4" /></button>
+              <button className="p-2 rounded-md hover:bg-muted/60 transition"><User className="w-4 h-4" /></button>
+              <button onClick={() => setCartOpen(true)} className="relative p-2 rounded-md hover:bg-muted/60 transition">
+                <ShoppingCart className="w-4 h-4" />
                 {cartCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-accent text-accent-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
-                    {cartCount}
-                  </span>
+                  <span className="absolute -top-2 -right-2 bg-accent text-accent-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center font-semibold">{cartCount}</span>
                 )}
               </button>
-              <Link to="/wishlist"><Button variant="ghost" size="icon"><Heart className="w-5 h-5" /></Button></Link>
+              <Link to="/wishlist"><Button variant="ghost" size="icon"><Heart className="w-4 h-4" /></Button></Link>
             </div>
           </div>
         </div>
       </nav>
 
-      <div className="container mx-auto px-4 py-12">
+      <main className="container mx-auto px-4 py-12">
         <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 bg-sale-blue text-white text-sm font-semibold px-4 py-2 rounded-full mb-4">
+          <header className="text-center mb-10">
+            <div className="inline-flex items-center gap-2 bg-sale-blue text-white text-xs font-semibold px-3 py-1 rounded-full mb-4">
               <Sparkles className="w-4 h-4" />
               AI-Powered Design
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">
-              Create Your Custom{" "}
-              <span className="text-sale-blue">
-                <SlideRotatingWords words={PRODUCT_WORDS} ms={2000} />
-              </span>
-            </h1>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Describe your vision and watch AI bring it to life.
-            </p>
-          </div>
+            <h1 className="text-3xl md:text-4xl font-bold mb-2">Create your custom <span className="text-sale-blue"><SlideRotatingWords words={PRODUCT_WORDS} ms={2000} /></span></h1>
+            <p className="text-sm text-muted-foreground max-w-2xl mx-auto">Minimal, fast, and focused — design prints for apparel using AI.</p>
+          </header>
 
-          <div className="grid lg:grid-cols-2 gap-8">
-            <div className="space-y-6 order-2 lg:order-1">
-              <div className="bg-card rounded-xl p-6 shadow-lg border border-border">
-                <h2 className="text-2xl font-bold mb-6">Design Settings</h2>
+          <div className="grid lg:grid-cols-2 gap-8 items-start">
+            <section className="space-y-6 order-2 lg:order-1">
+              <form className="bg-card rounded-2xl p-6 shadow-sm border border-border">
+                <div className="flex items-start justify-between mb-4">
+                  <h2 className="text-lg font-semibold">Design Settings</h2>
+                  <div className="text-sm text-muted-foreground">Quick options</div>
+                </div>
+
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="prompt" className="text-base font-semibold mb-2 block">
-                      Describe Your Design
-                    </Label>
-                    <Textarea
-                      id="prompt"
-                      placeholder="E.g., A futuristic robot playing guitar under neon lights..."
-                      value={prompt}
-                      onChange={(e) => setPrompt(e.target.value)}
-                      rows={4}
-                      className="resize-none"
-                    />
+                    <Label htmlFor="prompt" className="text-sm font-semibold mb-2 block">Describe Your Design</Label>
+                    <Textarea id="prompt" placeholder="E.g., A futuristic robot playing guitar under neon lights..." value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={4} className="resize-none" />
                   </div>
 
                   <div>
-                    <Label htmlFor="designText" className="text-base font-semibold mb-2 block">
-                      Add Text to Design <span className="text-sm text-muted-foreground">(optional)</span>
-                    </Label>
-                    <Input
-                      id="designText"
-                      placeholder="e.g., 'Live Loud', 'Dream Big'"
-                      value={designText}
-                      onChange={(e) => setDesignText(e.target.value)}
-                      maxLength={120}
-                    />
-                    <p className="text-sm text-muted-foreground mt-1">
-                      This text will be included in your design if provided.
-                    </p>
+                    <Label htmlFor="designText" className="text-sm font-semibold mb-2 block">Add Text <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                    <Input id="designText" placeholder="e.g., 'Live Loud'" value={designText} onChange={(e) => setDesignText(e.target.value)} maxLength={120} />
+                    <p className="text-xs text-muted-foreground mt-1">This text will be included in your design if provided.</p>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-semibold mb-2 block">Style</Label>
+                      <Select value={style} onValueChange={setStyle}>
+                        <SelectTrigger id="style"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="modern">Modern</SelectItem>
+                          <SelectItem value="vintage">Vintage</SelectItem>
+                          <SelectItem value="minimalist">Minimalist</SelectItem>
+                          <SelectItem value="abstract">Abstract</SelectItem>
+                          <SelectItem value="retro">Retro</SelectItem>
+                          <SelectItem value="graffiti">Graffiti</SelectItem>
+                          <SelectItem value="anime">Anime</SelectItem>
+                          <SelectItem value="geometric">Geometric</SelectItem>
+                          <SelectItem value="organic">Organic</SelectItem>
+                          <SelectItem value="grunge">Grunge</SelectItem>
+                          <SelectItem value="realistic">Realistic</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label className="text-sm font-semibold mb-2 block">Color Scheme</Label>
+                      <Select value={colorScheme} onValueChange={setColorScheme}>
+                        <SelectTrigger id="colorScheme"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="normal">Normal</SelectItem>
+                          <SelectItem value="vibrant">Vibrant</SelectItem>
+                          <SelectItem value="pastel">Pastel</SelectItem>
+                          <SelectItem value="monochrome">Monochrome</SelectItem>
+                          <SelectItem value="neon">Neon</SelectItem>
+                          <SelectItem value="earth-tones">Earth Tones</SelectItem>
+                          <SelectItem value="black-white">Black & White</SelectItem>
+                          <SelectItem value="cool">Cool Tones</SelectItem>
+                          <SelectItem value="warm">Warm Tones</SelectItem>
+                          <SelectItem value="gradient">Gradient</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-semibold mb-2 block">Clothing Type</Label>
+                      <Select value={clothingType} onValueChange={(val) => setClothingType(val as ClothingType)}>
+                        <SelectTrigger id="clothingType"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="t-shirt">T-Shirt</SelectItem>
+                          <SelectItem value="polo">Polo</SelectItem>
+                          <SelectItem value="hoodie">Hoodie</SelectItem>
+                          <SelectItem value="tops">Tops</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label className="text-sm font-semibold mb-2 block">Position</Label>
+                      <Select value={imagePosition} onValueChange={(val) => setImagePosition(val as ImagePosition)}>
+                        <SelectTrigger id="imagePosition"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {(clothingType === "t-shirt" || clothingType === "hoodie") && (
+                            <>
+                              <SelectItem value="front">Front</SelectItem>
+                              <SelectItem value="back">Back</SelectItem>
+                            </>
+                          )}
+                          {clothingType === "polo" && <SelectItem value="back">Back</SelectItem>}
+                          {clothingType === "tops" && <SelectItem value="front">Front</SelectItem>}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
 
                   <div>
-                    <Label htmlFor="style" className="text-base font-semibold mb-2 block">Design Style</Label>
-                    <Select value={style} onValueChange={setStyle}>
-                      <SelectTrigger id="style"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="modern">Modern</SelectItem>
-                        <SelectItem value="vintage">Vintage</SelectItem>
-                        <SelectItem value="minimalist">Minimalist</SelectItem>
-                        <SelectItem value="abstract">Abstract</SelectItem>
-                        <SelectItem value="retro">Retro</SelectItem>
-                        <SelectItem value="graffiti">Graffiti</SelectItem>
-                        <SelectItem value="anime">Anime</SelectItem>
-                        <SelectItem value="geometric">Geometric</SelectItem>
-                        <SelectItem value="organic">Organic</SelectItem>
-                        <SelectItem value="grunge">Grunge</SelectItem>
-                        <SelectItem value="realistic">Realistic</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Button onClick={handleGenerate} disabled={isGenerating} className="w-full bg-sale-blue hover:bg-sale-blue/90 text-white font-bold py-4 text-base">
+                      {isGenerating ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating...</>) : (<><Sparkles className="w-4 h-4 mr-2" />Generate Design</>)}
+                    </Button>
                   </div>
-
-                  <div>
-                    <Label htmlFor="colorScheme" className="text-base font-semibold mb-2 block">Color Scheme</Label>
-                    <Select value={colorScheme} onValueChange={setColorScheme}>
-                      <SelectTrigger id="colorScheme"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="normal">Normal</SelectItem>
-                        <SelectItem value="vibrant">Vibrant</SelectItem>
-                        <SelectItem value="pastel">Pastel</SelectItem>
-                        <SelectItem value="monochrome">Monochrome</SelectItem>
-                        <SelectItem value="neon">Neon</SelectItem>
-                        <SelectItem value="earth-tones">Earth Tones</SelectItem>
-                        <SelectItem value="black-white">Black & White</SelectItem>
-                        <SelectItem value="cool">Cool Tones</SelectItem>
-                        <SelectItem value="warm">Warm Tones</SelectItem>
-                        <SelectItem value="gradient">Gradient</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="clothingType" className="text-base font-semibold mb-2 block">Clothing Type</Label>
-                    <Select value={clothingType} onValueChange={(val) => setClothingType(val as ClothingType)}>
-                      <SelectTrigger id="clothingType"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="t-shirt">T-Shirt</SelectItem>
-                        <SelectItem value="polo">Polo</SelectItem>
-                        <SelectItem value="hoodie">Hoodie</SelectItem>
-                        <SelectItem value="tops">Tops</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="imagePosition" className="text-base font-semibold mb-2 block">Position</Label>
-                    <Select value={imagePosition} onValueChange={(val) => setImagePosition(val as ImagePosition)}>
-                      <SelectTrigger id="imagePosition"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {(clothingType === "t-shirt" || clothingType === "hoodie") && (
-                          <>
-                            <SelectItem value="front">Front</SelectItem>
-                            <SelectItem value="back">Back</SelectItem>
-                          </>
-                        )}
-                        {clothingType === "polo" && <SelectItem value="back">Back</SelectItem>}
-                        {clothingType === "tops" && <SelectItem value="front">Front</SelectItem>}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Button
-                    onClick={handleGenerate}
-                    disabled={isGenerating}
-                    className="w-full bg-sale-blue hover:bg-sale-blue/90 text-white font-bold py-6 text-lg"
-                    size="lg"
-                  >
-                    {isGenerating ? (
-                      <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Generating...</>
-                    ) : (
-                      <><Sparkles className="w-5 h-5 mr-2" />Generate Design</>
-                    )}
-                  </Button>
                 </div>
-              </div>
+              </form>
 
-              <div className="bg-muted rounded-xl p-6">
-                <h3 className="font-bold mb-3">💡 Tips for Best Results</h3>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li>• Be specific about key elements, colors & mood</li>
-                  <li>• Use the text field to add quotes or words to your design</li>
-                  <li>• Try different styles for varied results</li>
+              <div className="bg-muted rounded-2xl p-5 text-sm text-muted-foreground">
+                <h3 className="font-medium mb-2">Tips for better results</h3>
+                <ul className="space-y-2 list-none">
+                  <li>• Use clear descriptors (objects, colors, mood)</li>
+                  <li>• Add exact text in the text field if you want it included</li>
+                  <li>• Try different styles for varied outputs</li>
                 </ul>
               </div>
-            </div>
+            </section>
 
-            <div className="order-1 lg:order-2">
+            <aside className="order-1 lg:order-2">
               <MockupPreview />
-            </div>
+            </aside>
           </div>
         </div>
-      </div>
+      </main>
 
       <CartSidebar open={cartOpen} onClose={() => setCartOpen(false)} />
       <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
 
       {showSurvey && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-          <div className="bg-card rounded-2xl shadow-2xl max-w-md w-full p-6 relative animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <button onClick={handleSurveySkip} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground">
-              <X className="w-5 h-5" />
-            </button>
-            <div className="mb-6">
-              <div className="w-12 h-12 bg-sale-blue/10 rounded-full flex items-center justify-center mb-4">
-                <Sparkles className="w-6 h-6 text-sale-blue" />
-              </div>
-              <h3 className="text-2xl font-bold mb-2">Help Us Personalize!</h3>
-              <p className="text-muted-foreground">Tell us your preferences for better suggestions</p>
+          <div className="bg-card rounded-2xl shadow-2xl max-w-md w-full p-6 relative">
+            <button onClick={handleSurveySkip} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+            <div className="mb-4">
+              <div className="w-10 h-10 bg-sale-blue/10 rounded-full flex items-center justify-center mb-3"><Sparkles className="w-5 h-5 text-sale-blue" /></div>
+              <h3 className="text-lg font-semibold mb-1">Help us personalize</h3>
+              <p className="text-sm text-muted-foreground">Choose a few preferences to improve recommendations.</p>
             </div>
-            <div className="space-y-4">
+
+            <div className="space-y-3">
               <div>
                 <Label className="text-sm font-semibold mb-2 block">Preferred Style</Label>
                 <Select value={surveyData.preferredStyle} onValueChange={(val) => setSurveyData({ ...surveyData, preferredStyle: val })}>
@@ -668,6 +628,7 @@ const AIGenerator = () => {
                   </SelectContent>
                 </Select>
               </div>
+
               <div>
                 <Label className="text-sm font-semibold mb-2 block">Preferred Colors</Label>
                 <Select value={surveyData.preferredColorScheme} onValueChange={(val) => setSurveyData({ ...surveyData, preferredColorScheme: val })}>
@@ -682,6 +643,7 @@ const AIGenerator = () => {
                   </SelectContent>
                 </Select>
               </div>
+
               <div>
                 <Label className="text-sm font-semibold mb-2 block">Preferred Clothing</Label>
                 <Select value={surveyData.preferredClothingType} onValueChange={(val) => setSurveyData({ ...surveyData, preferredClothingType: val })}>
@@ -695,68 +657,38 @@ const AIGenerator = () => {
                 </Select>
               </div>
             </div>
-            <div className="mt-6 flex gap-3">
+
+            <div className="mt-4 flex gap-3">
               <Button variant="outline" onClick={handleSurveySkip} className="flex-1">Skip</Button>
               <Button onClick={handleSurveySubmit} className="flex-1 bg-sale-blue hover:bg-sale-blue/90">Submit</Button>
             </div>
           </div>
         </div>
       )}
-      {/* LARGE DESIGN MODAL - PERFECT MEDIUM SIZE */}
+
       {showLargeModal && generatedImage && (
-        <div
-          className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
-          aria-modal="true"
-          role="dialog"
-        >
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/70"
-            onClick={() => setShowLargeModal(false)}
-          />
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4" aria-modal="true" role="dialog">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowLargeModal(false)} />
 
-          {/* Modal Container */}
           <div className="relative z-10 w-full max-w-[70vw] max-h-[80vh] flex flex-col items-center">
-            {/* Close Button */}
-            <button
-              onClick={() => setShowLargeModal(false)}
-              className="absolute -top-10 right-0 bg-card/90 backdrop-blur rounded-full p-2 hover:scale-105 transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <button onClick={() => setShowLargeModal(false)} className="absolute -top-10 right-0 bg-card/90 backdrop-blur rounded-full p-2 hover:scale-105 transition"><X className="w-5 h-5" /></button>
 
-            {/* Modal Content */}
             <div className="bg-card rounded-xl shadow-2xl p-4 w-full flex flex-col items-center">
-              {/* Header */}
               <div className="flex items-center justify-between w-full mb-3">
                 <div className="text-sm text-muted-foreground">Preview</div>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={handleDownloadOriginal} className="flex items-center gap-2">
-                    <Download className="w-4 h-4" /> Original
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={handleDownload} className="flex items-center gap-2">
-                    <Download className="w-4 h-4" /> Watermark
-                  </Button>
+                  <Button size="sm" onClick={handleAddToCart} className="flex items-center gap-2"><ShoppingCart className="w-4 h-4" /> Add to Cart</Button>
+                  <Button size="sm" variant="ghost" onClick={handleAddToWishlist} className="flex items-center gap-2"><Heart className="w-4 h-4" /> Wishlist</Button>
                 </div>
               </div>
 
-              {/* Medium-sized Image */}
               <div className="flex items-center justify-center w-full">
-                <img
-                  src={generatedImage}
-                  alt="Large generated design"
-                  className="object-contain max-w-[65vw] max-h-[65vh] rounded-md"
-                  draggable={false}
-                />
+                <img src={generatedImage} alt="Large generated design" className="object-contain max-w-[65vw] max-h-[65vh] rounded-md" draggable={false} />
               </div>
             </div>
           </div>
         </div>
       )}
-
-
     </div>
   );
-};
-
-export default AIGenerator;
+}
