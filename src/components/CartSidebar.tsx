@@ -1,5 +1,5 @@
 // src/components/CartSidebar.tsx
-import { X, Minus, Plus, ShoppingBag } from "lucide-react";
+import { X, Minus, Plus, ShoppingBag, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ interface CartSidebarProps {
 
 export const CartSidebar = ({ open, onClose }: CartSidebarProps) => {
   const navigate = useNavigate();
-  const { cart, removeFromCart, updateQuantity, cartTotal, clearCart } = useCart();
+  const { cart, removeFromCart, updateQuantity, cartTotal, clearCart, isLoading } = useCart();
 
   // which item (by key) triggered the bulk prompt (UI hint)
   const [bulkItemKey, setBulkItemKey] = useState<string | null>(null);
@@ -114,7 +114,14 @@ export const CartSidebar = ({ open, onClose }: CartSidebarProps) => {
           </SheetTitle>
         </SheetHeader>
 
-        {cart.length === 0 ? (
+        {isLoading ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Loading cart...</p>
+            </div>
+          </div>
+        ) : cart.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <ShoppingBag className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
