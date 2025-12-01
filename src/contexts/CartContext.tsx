@@ -170,13 +170,19 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         if (existingIndex >= 0) {
           const existingItem = cart[existingIndex];
-          await supabase
+          let query = supabase
             .from('cart_items')
             .update({ quantity: existingItem.quantity + qtyToAdd })
             .eq('user_id', user.id)
-            .eq('product_id', item.id)
-            .eq('selected_size', item.size || null)
-            .eq('selected_color', item.color || null);
+            .eq('product_id', item.id);
+
+          if (item.size) query = query.eq('selected_size', item.size);
+          else query = query.is('selected_size', null);
+          
+          if (item.color) query = query.eq('selected_color', item.color);
+          else query = query.is('selected_color', null);
+
+          await query;
         } else {
           await supabase.from('cart_items').insert({
             user_id: user.id,
