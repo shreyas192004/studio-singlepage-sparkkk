@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Heart, ShoppingCart, Search, User, X } from "lucide-react";
+import { Heart, ShoppingCart, Search, User, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useWishlist } from "@/contexts/WishlistContext";
 import { useCart } from "@/contexts/CartContext";
@@ -8,10 +8,8 @@ import { useState } from "react";
 import { CartSidebar } from "@/components/CartSidebar";
 import Logo from "../../public/logo.png";
 
-
-
 const Wishlist = () => {
-  const { wishlist, removeFromWishlist } = useWishlist();
+  const { wishlist, removeFromWishlist, isLoading } = useWishlist();
   const { addToCart, cartCount } = useCart();
   const [cartOpen, setCartOpen] = useState(false);
 
@@ -41,8 +39,6 @@ const Wishlist = () => {
             <div className="hidden md:flex items-center gap-8">
               <Link to="/" className="hover:text-accent transition-colors">Shop</Link>
               <Link to="/ai-generator" className="hover:text-accent transition-colors">Ai Generator</Link>
-              {/* <Link to="/" className="hover:text-accent transition-colors">Accessories</Link>
-              <Link to="/" className="hover:text-accent transition-colors">Sale</Link> */}
             </div>
             <div className="flex items-center gap-4">
               <button className="hover:text-accent transition-colors">
@@ -77,7 +73,12 @@ const Wishlist = () => {
       <div className="container mx-auto px-4 py-12">
         <h1 className="text-4xl font-bold mb-8">My Wishlist ({wishlist.length})</h1>
 
-        {wishlist.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            <span className="ml-3 text-muted-foreground">Loading wishlist...</span>
+          </div>
+        ) : wishlist.length === 0 ? (
           <div className="text-center py-20">
             <Heart className="w-24 h-24 mx-auto mb-6 text-muted-foreground" />
             <h2 className="text-2xl font-bold mb-3">Your wishlist is empty</h2>

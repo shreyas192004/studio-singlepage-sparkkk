@@ -41,8 +41,18 @@ const CheckoutAI: React.FC = () => {
   const [size, setSize] = useState<string>("M");
   const [color, setColor] = useState<string>("black");
   const [quantity, setQuantity] = useState<number>(1);
-  const [price, setPrice] = useState<number>(1999); // base price, change as needed
+  const [price, setPrice] = useState<number>(1999);
   const [isPlacing, setIsPlacing] = useState(false);
+
+  // Address form state
+  const [formData, setFormData] = useState({
+    email: '',
+    name: '',
+    address: '',
+    city: '',
+    pincode: '',
+    phone: '',
+  });
 
   // Coupon and discount states
   const [couponCode, setCouponCode] = useState<string>("");
@@ -209,16 +219,24 @@ const CheckoutAI: React.FC = () => {
 
   const generateInvoiceHTML = (orderNumber: string, aiDesignPublicUrl?: string) => {
     const invoiceDate = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-    const total = (price * quantity).toFixed(2);
+    const total = finalTotal.toFixed(2);
     return `<!DOCTYPE html><html><head><meta charset="utf-8" /><title>Invoice #${orderNumber}</title><style>
       body{font-family:Arial;margin:36px;color:#222} .header{text-align:center;border-bottom:2px solid #000;padding-bottom:14px;margin-bottom:18px}
       h1{margin:0;font-size:28px} table{width:100%;border-collapse:collapse;margin-top:12px} th{background:#f5f5f5;padding:10px;text-align:left} td{padding:10px;border-bottom:1px solid #eee}
       .right{text-align:right}.totals{width:320px;margin-left:auto;margin-top:10px}.total-row{font-weight:700;border-top:2px solid #000;padding-top:8px}
       .footer{margin-top:36px;text-align:center;color:#666;font-size:13px;border-top:1px solid #eee;padding-top:12px}
       .detail-badge{background:#e3f2fd;padding:3px 8px;border-radius:4px;font-weight:600;margin-right:8px;display:inline-block;margin-bottom:4px}
+      .address-box{background:#f8f9fa;padding:15px;border-radius:8px;margin:15px 0}
     </style></head><body>
       <div class="header"><h1>Invoice</h1><div>Order #${orderNumber}</div><div>${invoiceDate}</div></div>
-      <div><strong>Bill To:</strong><br/>${user?.email ?? "—"}</div>
+      <div class="address-box">
+        <strong>Ship To:</strong><br/>
+        ${escapeHtml(formData.name)}<br/>
+        ${escapeHtml(formData.address)}<br/>
+        ${escapeHtml(formData.city)}, ${escapeHtml(formData.pincode)}<br/>
+        Phone: ${escapeHtml(formData.phone)}<br/>
+        Email: ${escapeHtml(formData.email)}
+      </div>
       <div style="margin-top:12px"><strong>Item</strong>
         <table><thead><tr><th>Product</th><th>Details</th><th class="right">Qty</th><th class="right">Unit</th><th class="right">Total</th></tr></thead>
         <tbody><tr><td>Custom AI Design</td>
@@ -231,8 +249,13 @@ const CheckoutAI: React.FC = () => {
         </td>
         <td class="right">${quantity}</td><td class="right">Rs ${Number(price).toFixed(2)}</td><td class="right">Rs ${(price * quantity).toFixed(2)}</td></tr></tbody></table>
       </div>
-      <div class="totals"><table><tr><td>Subtotal:</td><td class="right">Rs ${(price * quantity).toFixed(2)}</td></tr><tr><td>Shipping:</td><td class="right">Free</td></tr>
-      <tr class="total-row"><td>Total:</td><td class="right">Rs ${total}</td></tr></table></div>
+      <div class="totals"><table>
+        <tr><td>Subtotal:</td><td class="right">Rs ${(price * quantity).toFixed(2)}</td></tr>
+        ${appliedCoupon ? `<tr style="color:#16a34a"><td>Coupon (${appliedCoupon.code}):</td><td class="right">-Rs ${appliedCoupon.discount.toFixed(2)}</td></tr>` : ''}
+        ${firstOrderDiscount > 0 ? `<tr style="color:#16a34a"><td>First Order (5%):</td><td class="right">-Rs ${firstOrderDiscount.toFixed(2)}</td></tr>` : ''}
+        <tr><td>Shipping:</td><td class="right">Free</td></tr>
+        <tr class="total-row"><td>Total:</td><td class="right">Rs ${total}</td></tr>
+      </table></div>
       <div style="margin-top:12px"><strong>Design:</strong><br/>${aiDesignPublicUrl ? `<a href="${aiDesignPublicUrl}">View Uploaded Design</a>` : (imageUrl ? `<a href="${imageUrl}">View Original Design</a>` : "—")}</div>
       <div class="footer">Thank you for your purchase! If you have questions, contact support.</div>
     </body></html>`;
@@ -243,8 +266,15 @@ const CheckoutAI: React.FC = () => {
     return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Manufacturing Order #${orderNumber}</title><style>
       body{font-family:Arial;margin:36px;color:#222}.header{text-align:center;margin-bottom:18px}h1{margin:0;font-size:24px}table{width:100%;border-collapse:collapse}th{background:#f5f5f5;padding:10px;text-align:left}td{padding:8px;border-bottom:1px solid #eee}.right{text-align:right}.small{font-size:13px;color:#555}
       .highlight{background:#fff3cd;padding:4px 10px;border-radius:4px;font-weight:bold}
+      .address-box{background:#f8f9fa;padding:15px;border-radius:8px;margin:15px 0}
     </style></head><body><div class="header"><h1>MANUFACTURING ORDER</h1><div>Order #${orderNumber} — ${invoiceDate}</div></div>
-      <div><strong>Buyer:</strong><br/>${user?.email ?? "—"}</div>
+      <div class="address-box">
+        <strong>📍 Ship To:</strong><br/>
+        <strong>${escapeHtml(formData.name)}</strong><br/>
+        ${escapeHtml(formData.address)}<br/>
+        ${escapeHtml(formData.city)}, ${escapeHtml(formData.pincode)}<br/>
+        📞 ${escapeHtml(formData.phone)}
+      </div>
       <div style="margin-top:12px"><h3>Production Details</h3><table><thead><tr><th>Product</th><th>Cloth Type</th><th>Size</th><th>Color</th><th class="right">Qty</th></tr></thead>
       <tbody><tr>
         <td>Custom AI Design</td>
@@ -331,6 +361,13 @@ const CheckoutAI: React.FC = () => {
     return { product, publicUrl, storagePath };
   };
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.id]: e.target.value,
+    });
+  };
+
   // ---------- main place order ----------
   const placeOrder = async () => {
     if (!user) {
@@ -341,13 +378,39 @@ const CheckoutAI: React.FC = () => {
       toast.error("Please select size and color.");
       return;
     }
+    if (!formData.name || !formData.email || !formData.address || !formData.city || !formData.pincode || !formData.phone) {
+      toast.error("Please fill in all address fields.");
+      return;
+    }
 
     setIsPlacing(true);
     toast.loading("Placing order...");
 
     try {
       const orderNumber = `ORD-${Date.now().toString().slice(-8)}`;
-      const total = finalTotal; // Use discounted total
+      const total = finalTotal;
+
+      // 0) Create shipping address
+      const { data: addressData, error: addressError } = await supabase
+        .from('addresses')
+        .insert({
+          user_id: user.id,
+          address_type: 'shipping',
+          full_name: formData.name,
+          phone: formData.phone,
+          address_line1: formData.address,
+          city: formData.city,
+          state: formData.city,
+          postal_code: formData.pincode,
+          country: 'India',
+        })
+        .select()
+        .single();
+
+      if (addressError) {
+        console.error("Address creation error:", addressError);
+        throw new Error("Failed to save shipping address");
+      }
 
       // 1) If product already exists (passed from generator), use it. Otherwise create product now.
       let productIdToUse: string | null = existingProductId ?? null;
@@ -403,10 +466,10 @@ const CheckoutAI: React.FC = () => {
           total_amount: total,
           currency: "INR",
           status: "processing",
-          payment_method: "wallet",
-          payment_status: "paid",
-          shipping_address_id: null,
-          billing_address_id: null,
+          payment_method: "cash_on_delivery",
+          payment_status: "pending",
+          shipping_address_id: addressData.id,
+          billing_address_id: addressData.id,
           invoice_url: `/invoices/${orderNumber}.html`,
           notes: aiDesignPublicUrl ? `AI design uploaded: ${aiDesignPublicUrl}` : (imageUrl ? `Original design: ${imageUrl}` : null),
         } as any)
@@ -524,6 +587,72 @@ const CheckoutAI: React.FC = () => {
                     <Button variant="outline" onClick={() => setQuantity(Math.max(1, quantity - 1))}>-</Button>
                     <Input value={quantity} onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value || "1")))} className="w-20 text-center" />
                     <Button variant="outline" onClick={() => setQuantity(quantity + 1)}>+</Button>
+                  </div>
+                </div>
+
+                {/* Shipping Address Form */}
+                <div className="border-t pt-4 mt-4">
+                  <h3 className="text-lg font-semibold mb-4">Shipping Address</h3>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label htmlFor="name">Full Name *</Label>
+                        <Input
+                          id="name"
+                          value={formData.name}
+                          onChange={handleInputChange}
+                          placeholder="Enter your name"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="email">Email *</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={formData.email}
+                          onChange={handleInputChange}
+                          placeholder="your@email.com"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="phone">Phone Number *</Label>
+                      <Input
+                        id="phone"
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        placeholder="+91 XXXXX XXXXX"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="address">Address *</Label>
+                      <Input
+                        id="address"
+                        value={formData.address}
+                        onChange={handleInputChange}
+                        placeholder="Street address, apartment, etc."
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label htmlFor="city">City *</Label>
+                        <Input
+                          id="city"
+                          value={formData.city}
+                          onChange={handleInputChange}
+                          placeholder="City"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="pincode">PIN Code *</Label>
+                        <Input
+                          id="pincode"
+                          value={formData.pincode}
+                          onChange={handleInputChange}
+                          placeholder="XXXXXX"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
 

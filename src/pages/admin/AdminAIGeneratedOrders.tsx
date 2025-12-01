@@ -108,10 +108,10 @@ const AdminAIGeneratedOrders = () => {
         return;
       }
 
-      // Get order items for those products and include product-level AI details
+      // Get order items for those products - include size and color directly from order_items
       const { data: orderItems } = await supabase
         .from("order_items")
-        .select("*, orders:order_id(id, order_number, status, total_amount, currency, payment_status, created_at, user_id, notes, shipping_address_id, created_at)")
+        .select("id, order_id, product_id, product_name, product_image, quantity, unit_price, total_price, size, color")
         .in("product_id", productIds)
         .order("created_at", { ascending: false });
 
@@ -120,7 +120,7 @@ const AdminAIGeneratedOrders = () => {
         return;
       }
 
-      // Combine product data into order items
+      // Combine product data into order items - size and color come from order_items directly
       const itemsWithAI = orderItems.map((item: any) => {
         const product = products?.find((p: any) => p.id === item.product_id);
         return {
@@ -132,10 +132,10 @@ const AdminAIGeneratedOrders = () => {
           quantity: item.quantity,
           unit_price: item.unit_price,
           total_price: item.total_price,
-          size: item.size || null,
-          color: item.color || null,
-          clothing_type: product?.clothing_type || null,
-          image_position: product?.image_position || null,
+          size: item.size || null, // From order_items
+          color: item.color || null, // From order_items
+          clothing_type: product?.clothing_type || null, // From products
+          image_position: product?.image_position || null, // From products
         } as OrderItem;
       });
 

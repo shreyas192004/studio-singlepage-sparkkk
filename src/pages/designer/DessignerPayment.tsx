@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDesigner } from "@/contexts/DesignerContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,36 +12,26 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Download } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Download, IndianRupee, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-
-// charts
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, Legend } from "recharts";
-
-const COLORS = ["#4f46e5", "#06b6d4", "#f59e0b", "#ef4444", "#10b981"];
-
-// Dummy fallback data
-const DUMMY_PRODUCTS = [
-  { id: "p1", title: "Cozy Hoodie", price: 399, currency: "₹", totalSold: 5, revenue: 100 },
-  { id: "p2", title: "Minimalist Mug", price: 499, currency: "₹", totalSold: 10, revenue: 9000 },
-  { id: "p3", title: "Desk Poster", price: 3099, currency: "₹", totalSold: 9, revenue: 2850 },
-];
-
-const DUMMY_PAYMENTS = [
-  { id: "pay1", month: "2025-07", amount: 150, received: true, issued_at: "2025-07-31" },
-  { id: "pay2", month: "2025-08", amount: 1200, received: false, issued_at: "2025-08-31" },
-  { id: "pay3", month: "2025-09", amount: 1800, received: true, issued_at: "2025-09-30" },
-];
+import { format } from "date-fns";
 
 interface PaymentRecord {
   id: string;
-  month: string; // YYYY-MM
   amount: number;
-  received: boolean;
-  issued_at?: string;
-  tx_reference?: string | null;
+  payment_date: string;
+  payment_method: string;
+  transaction_id: string;
+  notes: string | null;
+}
+
+interface ProductSale {
+  id: string;
+  title: string;
+  price: number;
+  totalSold: number;
+  revenue: number;
 }
 
 const DesignerPayment: React.FC = () => {
@@ -49,14 +39,10 @@ const DesignerPayment: React.FC = () => {
   const navigate = useNavigate();
 
   const [designerId, setDesignerId] = useState<string | null>(null);
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<ProductSale[]>([]);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
-  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
-  const [selectedPayment, setSelectedPayment] = useState<PaymentRecord | null>(null);
-  const [manualTxRef, setManualTxRef] = useState("");
-  const [showHistory, setShowHistory] = useState(false); // NEW: toggle for payment history
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     if (!loading && !isDesigner) navigate("/designer/login");
@@ -64,110 +50,97 @@ const DesignerPayment: React.FC = () => {
 
   useEffect(() => {
     if (isDesigner) init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDesigner]);
 
   const init = async () => {
     setIsLoading(true);
     try {
-      const { data: userRes } = await (supabase as any).auth.getUser();
+      const { data: userRes } = await supabase.auth.getUser();
       const user = userRes?.user;
       if (!user) {
-        applyDummy();
+        setIsLoading(false);
         return;
       }
 
-      const { data: designerData } = await (supabase as any)
+      const { data: designerData } = await supabase
         .from("designers")
         .select("id")
         .eq("user_id", user.id)
         .maybeSingle();
 
       if (!designerData) {
-        applyDummy();
+        setIsLoading(false);
         return;
       }
 
       setDesignerId(designerData.id);
 
-      // fetch products for designer
-      const { data: productsData, error: pErr } = await (supabase as any)
+      // Fetch products for designer
+      const { data: productsData } = await supabase
         .from("products")
-        .select("id, title, price, currency, images, designer_id")
+        .select("id, title, price")
         .eq("designer_id", designerData.id)
         .order("created_at", { ascending: false });
 
-      if (pErr) throw pErr;
+      // Fetch order items for these products to calculate sales
+      const productIds = productsData?.map(p => p.id) || [];
+      let productSales: ProductSale[] = [];
 
-      // fetch payments table (monthly payouts to designer)
-      const { data: paymentsData } = await (supabase as any)
+      if (productIds.length > 0) {
+        const { data: orderItems } = await supabase
+          .from("order_items")
+          .select("product_id, quantity, total_price")
+          .in("product_id", productIds);
+
+        productSales = (productsData || []).map(product => {
+          const items = (orderItems || []).filter(item => item.product_id === product.id);
+          const totalSold = items.reduce((sum, item) => sum + item.quantity, 0);
+          const revenue = items.reduce((sum, item) => sum + Number(item.total_price), 0);
+          return {
+            id: product.id,
+            title: product.title,
+            price: product.price,
+            totalSold,
+            revenue,
+          };
+        });
+      }
+
+      setProducts(productSales);
+
+      // Fetch payments from designer_payments table
+      const { data: paymentsData, error: paymentsError } = await supabase
         .from("designer_payments")
-        .select("id, month, amount, received, issued_at, tx_reference")
+        .select("id, amount, payment_date, payment_method, transaction_id, notes")
         .eq("designer_id", designerData.id)
-        .order("month", { ascending: false })
-        .limit(100);
+        .order("payment_date", { ascending: false });
 
-      setProducts(productsData && productsData.length ? productsData : DUMMY_PRODUCTS);
-      setPayments(paymentsData && paymentsData.length ? paymentsData : DUMMY_PAYMENTS);
+      if (paymentsError) {
+        console.error("Error fetching payments:", paymentsError);
+      } else {
+        setPayments(paymentsData || []);
+      }
     } catch (err) {
-      console.error("DesignPayment init error:", err);
-      applyDummy();
+      console.error("DesignerPayment init error:", err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const applyDummy = () => {
-    setProducts(DUMMY_PRODUCTS);
-    setPayments(DUMMY_PAYMENTS);
-    setIsLoading(false);
-  };
-
-  // compute totals
-  const totalRevenue = useMemo(() => products.reduce((s, p) => s + (p.revenue || 0), 0), [products]);
-  const totalDue = useMemo(() => {
-    // due = sum of months not received
-    return payments.filter((p) => !p.received).reduce((s, p) => s + p.amount, 0);
-  }, [payments]);
-
-  const paymentHistoryTable = payments.map((p) => ({ ...p }));
-
-  // mark payment as received (admin action simulated here)
-  const markAsReceived = async (paymentId: string, txRef?: string) => {
-    try {
-      // update supabase table if available
-      const { error } = await (supabase as any)
-        .from("designer_payments")
-        .update({ received: true, tx_reference: txRef || null, issued_at: new Date().toISOString() })
-        .eq("id", paymentId);
-
-      if (error) {
-        // fallback to local update if table doesn't exist
-        console.warn("update payment error, applying local update:", (error as any).message || error);
-        setPayments((prev) => prev.map((r) => (r.id === paymentId ? { ...r, received: true, tx_reference: txRef, issued_at: new Date().toISOString() } : r)));
-        toast.success("Marked payment as received (local)");
-        return;
-      }
-
-      // refresh list
-      setPayments((prev) => prev.map((r) => (r.id === paymentId ? { ...r, received: true, tx_reference: txRef || null, issued_at: new Date().toISOString() } : r)));
-      toast.success("Payment marked as received");
-    } catch (err: any) {
-      console.error("markAsReceived error:", err);
-      toast.error("Failed to mark payment as received: " + (err.message || String(err)));
-    }
-  };
+  // Calculate totals
+  const totalRevenue = products.reduce((sum, p) => sum + p.revenue, 0);
+  const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const pendingAmount = Math.max(0, totalRevenue - totalPaid);
 
   const exportPaymentsCSV = () => {
-    // build rows first, then join to CSV — this avoids any parentheses/spread mistakes
     const csvRows = [
-      ["Month", "Amount", "Received", "Issued At", "TX Reference"],
-      ...paymentHistoryTable.map((p) => [
-        p.month,
+      ["Date", "Amount", "Payment Method", "Transaction ID", "Notes"],
+      ...payments.map((p) => [
+        format(new Date(p.payment_date), "yyyy-MM-dd"),
         p.amount,
-        p.received ? "Yes" : "No",
-        p.issued_at || "-",
-        p.tx_reference || "-",
+        p.payment_method,
+        p.transaction_id,
+        p.notes || "-",
       ]),
     ];
 
@@ -190,167 +163,155 @@ const DesignerPayment: React.FC = () => {
     <div className="min-h-screen bg-background">
       <header className="border-b">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Designer Payouts</h1>
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/designer/dashboard")}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h1 className="text-2xl font-bold">My Payments</h1>
+          </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={exportPaymentsCSV}><Download className="mr-2 h-4 w-4" /> Export Payments</Button>
+            <Button variant="outline" onClick={exportPaymentsCSV} disabled={payments.length === 0}>
+              <Download className="mr-2 h-4 w-4" /> Export CSV
+            </Button>
           </div>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8 space-y-6">
+        {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card>
             <CardHeader>
               <CardTitle>Total Revenue</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">₹{totalRevenue.toFixed(2)}</div>
-              <div className="text-sm text-muted-foreground">Revenue across your products</div>
+              <div className="text-3xl font-bold flex items-center gap-1">
+                <IndianRupee className="h-6 w-6" />
+                {totalRevenue.toLocaleString()}
+              </div>
+              <div className="text-sm text-muted-foreground">From product sales</div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Total Due</CardTitle>
+              <CardTitle>Total Paid</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">₹{totalDue.toFixed(2)}</div>
-              <div className="text-sm text-muted-foreground">Amount pending to be paid by admin</div>
+              <div className="text-3xl font-bold text-green-600 flex items-center gap-1">
+                <IndianRupee className="h-6 w-6" />
+                {totalPaid.toLocaleString()}
+              </div>
+              <div className="text-sm text-muted-foreground">Payments received</div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Last Payout</CardTitle>
+              <CardTitle>Pending Amount</CardTitle>
             </CardHeader>
             <CardContent>
-              {payments.length > 0 ? (
-                <div>
-                  <div className="font-medium">{payments[0].month}</div>
-                  <div className="text-sm">₹{payments[0].amount.toFixed(2)} • {payments[0].received ? "Received" : "Pending"}</div>
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">No payouts yet</div>
-              )}
+              <div className="text-3xl font-bold flex items-center gap-1">
+                <Badge variant={pendingAmount > 0 ? "destructive" : "secondary"} className="text-xl px-3 py-1">
+                  <IndianRupee className="h-5 w-5 mr-1" />
+                  {pendingAmount.toLocaleString()}
+                </Badge>
+              </div>
+              <div className="text-sm text-muted-foreground">Yet to be paid</div>
             </CardContent>
           </Card>
         </div>
 
-        {/* PRODUCTS: moved before payments */}
+        {/* Products Sales Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Products</CardTitle>
+            <CardTitle>Product Sales</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
+            {products.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">
+                No products or sales data yet
+              </p>
+            ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Product</TableHead>
-                    <TableHead>Price</TableHead>
-                    <TableHead>Total Sold</TableHead>
-                    <TableHead>Revenue</TableHead>
+                    <TableHead className="text-right">Price</TableHead>
+                    <TableHead className="text-right">Units Sold</TableHead>
+                    <TableHead className="text-right">Revenue</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {products.map((p) => (
-                    <TableRow key={p.id} className="hover:bg-muted/50">
-                      <TableCell>{p.title}</TableCell>
-                      <TableCell>{p.currency || "₹"} {p.price?.toFixed ? p.price.toFixed(2) : p.price}</TableCell>
-                      <TableCell>{p.totalSold || 0}</TableCell>
-                      <TableCell>₹{(p.revenue || 0).toFixed(2)}</TableCell>
+                    <TableRow key={p.id}>
+                      <TableCell className="font-medium">{p.title}</TableCell>
+                      <TableCell className="text-right">₹{p.price.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">{p.totalSold}</TableCell>
+                      <TableCell className="text-right text-green-600 font-medium">
+                        ₹{p.revenue.toLocaleString()}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-            </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Toggle button to show/hide payment history */}
+        {/* Toggle Payment History */}
         <div className="flex justify-end">
           <Button onClick={() => setShowHistory((s) => !s)}>
             {showHistory ? "Hide Payment History" : "View Payment History"}
           </Button>
         </div>
 
-        {/* payments table — only visible when showHistory is true */}
+        {/* Payment History Table */}
         {showHistory && (
           <Card>
             <CardHeader>
               <CardTitle>Payment History</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              {payments.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  No payments received yet
+                </p>
+              ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Month</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Issued At</TableHead>
-                      <TableHead>TX Reference</TableHead>
-                      <TableHead>Action</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead>Payment Method</TableHead>
+                      <TableHead>Transaction ID</TableHead>
+                      <TableHead>Notes</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paymentHistoryTable.map((p) => (
-                      <TableRow key={p.id} className="hover:bg-muted/50">
-                        <TableCell>{p.month}</TableCell>
-                        <TableCell>₹{p.amount.toFixed(2)}</TableCell>
-                        <TableCell>{p.received ? "Received" : "Pending"}</TableCell>
-                        <TableCell>{p.issued_at ? new Date(p.issued_at).toLocaleDateString() : "-"}</TableCell>
-                        <TableCell>{p.tx_reference || "-"}</TableCell>
+                    {payments.map((payment) => (
+                      <TableRow key={payment.id}>
                         <TableCell>
-                          {!p.received && (
-                            <div className="flex gap-2">
-                              <Button size="sm" variant="outline" onClick={() => { setSelectedPayment(p); setShowPaymentDialog(true); }}>
-                                Mark Received
-                              </Button>
-                            </div>
-                          )}
+                          {format(new Date(payment.payment_date), "dd MMM yyyy")}
                         </TableCell>
+                        <TableCell className="text-right">
+                          <span className="flex items-center justify-end gap-1 text-green-600 font-medium">
+                            <IndianRupee className="h-3 w-3" />
+                            {Number(payment.amount).toLocaleString()}
+                          </span>
+                        </TableCell>
+                        <TableCell>{payment.payment_method}</TableCell>
+                        <TableCell className="font-mono text-sm">{payment.transaction_id}</TableCell>
+                        <TableCell className="text-muted-foreground">{payment.notes || "-"}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-              </div>
+              )}
             </CardContent>
           </Card>
         )}
-
       </main>
-
-      {/* Mark payment dialog */}
-      <Dialog open={showPaymentDialog} onOpenChange={() => setShowPaymentDialog(false)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Mark Payment Received</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div>
-              <div className="text-sm text-muted-foreground">Month</div>
-              <div className="font-medium">{selectedPayment?.month}</div>
-            </div>
-
-            <div>
-              <div className="text-sm text-muted-foreground">Amount</div>
-              <div className="font-medium">₹{selectedPayment?.amount?.toFixed(2)}</div>
-            </div>
-
-            <div>
-              <label className="text-sm block mb-1">Transaction Reference (optional)</label>
-              <Input value={manualTxRef} onChange={(e) => setManualTxRef(e.target.value)} placeholder="Bank txn id or reference" />
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowPaymentDialog(false)}>Cancel</Button>
-              <Button onClick={() => { if (selectedPayment) { markAsReceived(selectedPayment.id, manualTxRef); setShowPaymentDialog(false); setManualTxRef(""); } }}>Confirm Received</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
