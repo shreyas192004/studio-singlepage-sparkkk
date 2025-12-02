@@ -80,14 +80,12 @@ const SlideRotatingWords = ({ words, ms = 2000 }: { words: string[]; ms?: number
   );
 };
 
-/* ---------- Portal modal that does NOT close on backdrop click + anti-flap guard ---------- */
+/* ---------- Portal modal that stays open ---------- */
 type PortalModalProps = {
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
   label?: string;
-  disableBackdropClose?: boolean; // we'll set true
-  antiFlapMs?: number; // guard window
 };
 
 function PortalModal({
@@ -95,42 +93,7 @@ function PortalModal({
   onClose,
   children,
   label = "modal",
-  disableBackdropClose = true,
-  antiFlapMs = 800,
 }: PortalModalProps) {
-  const openAtRef = useRef<number | null>(null);
-  const closedQuicklyRef = useRef(false);
-  const firstReopenDoneRef = useRef(false);
-
-  useEffect(() => {
-    if (open) {
-      openAtRef.current = Date.now();
-      closedQuicklyRef.current = false;
-      firstReopenDoneRef.current = false;
-      console.debug(`[PortalModal:${label}] opened at`, openAtRef.current);
-    } else {
-      // closed — check how soon after opening
-      if (openAtRef.current) {
-        const delta = Date.now() - openAtRef.current;
-        console.debug(`[PortalModal:${label}] closed after ${delta}ms`);
-        if (delta < antiFlapMs && !firstReopenDoneRef.current) {
-          closedQuicklyRef.current = true;
-          // reopen once after a tiny delay to avoid render loops
-          setTimeout(() => {
-            if (closedQuicklyRef.current && !firstReopenDoneRef.current) {
-              console.debug(`[PortalModal:${label}] anti-flap reopening modal`);
-              firstReopenDoneRef.current = true;
-              // We call onClose? No — we need to set open state from parent.
-              // To reopen, we dispatch a CustomEvent so parent can re-open.
-              window.dispatchEvent(new CustomEvent(`reopen-modal-${label}`));
-            }
-          }, 60);
-        }
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
   useEffect(() => {
     const onEsc = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -139,18 +102,10 @@ function PortalModal({
     return () => window.removeEventListener("keydown", onEsc);
   }, [open, onClose]);
 
-  useEffect(() => {
-    const onReopen = () => {
-      // parent should listen to this event and set open = true when appropriate
-    };
-    window.addEventListener(`reopen-modal-${label}`, onReopen);
-    return () => window.removeEventListener(`reopen-modal-${label}`, onReopen);
-  }, [label]);
-
   if (!open) return null;
 
   const modal = (
-    <div className={baseClass} role="dialog" aria-modal="true" aria-label={label} onClick={(e) => disableBackdropClose && e.stopPropagation()}>
+    <div className={baseClass} role="dialog" aria-modal="true" aria-label={label}>
       <div className="absolute inset-0 bg-black/60" aria-hidden="true" />
       <div
         className="relative z-10 w-full max-w-md bg-card rounded-2xl shadow-2xl p-6"
@@ -161,36 +116,22 @@ function PortalModal({
     </div>
   );
 
-  // portal it
   return ReactDOM.createPortal(modal, document.body);
 }
 
-/* ---------- Inline special modals (Login + Limit) that use PortalModal and anti-flap reopen handling ---------- */
+/* ---------- Inline special modals (Login + Limit) ---------- */
 function LoginRequiredModal({
   open,
   onClose,
-  onRequestReopen, // parent callback for anti-flap reopen
 }: {
   open: boolean;
   onClose: () => void;
-  onRequestReopen?: () => void;
 }) {
-  useEffect(() => {
-    const handler = () => {
-      // when PortalModal dispatches reopen event, call parent reopen
-      onRequestReopen?.();
-    };
-    window.addEventListener("reopen-modal-login-required", handler);
-    return () => window.removeEventListener("reopen-modal-login-required", handler);
-  }, [onRequestReopen]);
-
   return (
     <PortalModal
       open={open}
       onClose={onClose}
       label="login-required"
-      antiFlapMs={800}
-      disableBackdropClose={true}
     >
       <div className="flex items-start justify-between mb-4">
         <div>
@@ -207,7 +148,7 @@ function LoginRequiredModal({
           You need to be signed in to continue. You can sign in or create an account.
         </p>
         <div className="flex gap-3">
-          <Link to="/auth" onClick={() => { /* don't auto-close; navigation will change route */ }} className="flex-1">
+          <Link to="/auth" className="flex-1">
             <Button className="w-full bg-sale-blue">Sign in / Sign up</Button>
           </Link>
           <Button variant="outline" className="flex-1" onClick={onClose}>
@@ -224,29 +165,17 @@ function GenerationLimitModal({
   onClose,
   generationCount,
   limit,
-  onRequestReopen,
 }: {
   open: boolean;
   onClose: () => void;
   generationCount: number;
   limit: number;
-  onRequestReopen?: () => void;
 }) {
-  useEffect(() => {
-    const handler = () => {
-      onRequestReopen?.();
-    };
-    window.addEventListener("reopen-modal-generation-limit", handler);
-    return () => window.removeEventListener("reopen-modal-generation-limit", handler);
-  }, [onRequestReopen]);
-
   return (
     <PortalModal
       open={open}
       onClose={onClose}
       label="generation-limit"
-      antiFlapMs={800}
-      disableBackdropClose={true}
     >
       <div className="flex items-start justify-between mb-4">
         <div>
@@ -345,24 +274,6 @@ export default function AIGenerator() {
   // Controlled modal states
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
-
-  // If parent/other code accidentally emits reopen events, we re-open once.
-  useEffect(() => {
-    const onReopenLogin = () => {
-      console.debug("[AIGenerator] Reopen request for login modal");
-      setShowLoginModal(true);
-    };
-    const onReopenLimit = () => {
-      console.debug("[AIGenerator] Reopen request for limit modal");
-      setShowLimitModal(true);
-    };
-    window.addEventListener("reopen-modal-login-required", onReopenLogin);
-    window.addEventListener("reopen-modal-generation-limit", onReopenLimit);
-    return () => {
-      window.removeEventListener("reopen-modal-login-required", onReopenLogin);
-      window.removeEventListener("reopen-modal-generation-limit", onReopenLimit);
-    };
-  }, []);
 
   const [userHasPurchased, setUserHasPurchased] = useState(false);
   const { user, signOut } = useAuth();
@@ -734,8 +645,10 @@ export default function AIGenerator() {
           price: product.price,
           image: (product.images && product.images[0]) || generatedImage,
           quantity: 1,
-          selected_size: selectedSize,
-          selected_color: selectedColor,
+          size: selectedSize,
+          color: selectedColor,
+          clothing_type: clothingType,
+          is_ai_generated: true,
         } as any);
         toast.success("Added custom design to cart");
       } else if (variantAction === "wishlist") {
@@ -744,8 +657,6 @@ export default function AIGenerator() {
           name: product.title,
           price: product.price,
           image: (product.images && product.images[0]) || generatedImage,
-          selected_size: selectedSize,
-          selected_color: selectedColor,
         } as any);
         toast.success("Added design to wishlist");
       }
@@ -1312,18 +1223,16 @@ export default function AIGenerator() {
         </div>
       )}
 
-      {/* Inline Portal-based modals (more robust vs layout re-renders) */}
+      {/* Inline Portal-based modals */}
       <LoginRequiredModal
         open={showLoginModal}
         onClose={() => setShowLoginModal(false)}
-        onRequestReopen={() => setShowLoginModal(true)}
       />
       <GenerationLimitModal
         open={showLimitModal}
         onClose={() => setShowLimitModal(false)}
         generationCount={generationCount}
         limit={AUTHENTICATED_USER_LIMIT}
-        onRequestReopen={() => setShowLimitModal(true)}
       />
     </div>
   );
