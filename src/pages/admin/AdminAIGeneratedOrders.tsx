@@ -33,7 +33,6 @@ interface OrderItem {
   total_price: number;
   size: string | null;
   color: string | null;
-  // additional AI product fields
   clothing_type?: string | null;
   image_position?: string | null;
 }
@@ -132,10 +131,10 @@ const AdminAIGeneratedOrders = () => {
           quantity: item.quantity,
           unit_price: item.unit_price,
           total_price: item.total_price,
-          size: item.size || null, // From order_items
-          color: item.color || null, // From order_items
-          clothing_type: product?.clothing_type || null, // From products
-          image_position: product?.image_position || null, // From products
+          size: item.size || null,
+          color: item.color || null,
+          clothing_type: product?.clothing_type || null,
+          image_position: product?.image_position || null,
         } as OrderItem;
       });
 
@@ -145,7 +144,7 @@ const AdminAIGeneratedOrders = () => {
       // fetch orders
       const { data: ordersData } = await supabase
         .from("orders")
-        .select("*, shipping_address_id, created_at")
+        .select("*, shipping_address_id, created_at, notes, status, payment_status, order_number")
         .in("id", orderIds)
         .order("created_at", { ascending: false });
 
@@ -157,7 +156,7 @@ const AdminAIGeneratedOrders = () => {
         .in("id", addressIds);
 
       // build enriched orders
-      const enriched: Order[] = ordersData.map((o: any) => {
+      const enriched: Order[] = (ordersData || []).map((o: any) => {
         const items = itemsWithAI.filter((it) => it.order_id === o.id);
         const addr = addresses?.find((a: any) => a.id === o.shipping_address_id) || null;
         return {
@@ -182,6 +181,16 @@ const AdminAIGeneratedOrders = () => {
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
+
+  // helper to safely produce an encoded URL for embedding in HTML
+  const safeUrl = (url: string | null) => {
+    if (!url) return "";
+    try {
+      return encodeURI(url);
+    } catch {
+      return url;
+    }
+  };
 
   const generateInvoiceHTML = (order: Order) => {
     const itemsHTML = order.order_items
@@ -208,13 +217,20 @@ const AdminAIGeneratedOrders = () => {
     return `<!doctype html><html><head><meta charset="utf-8"><title>AI Invoice - ${order.order_number}</title></head><body><h2>Invoice ${order.order_number}</h2><p>Date: ${new Date(order.created_at).toLocaleString()}</p><table width="100%" cellpadding="0" cellspacing="0"><thead><tr><th>Product</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead><tbody>${itemsHTML}</tbody></table><h3>Total: ₹${designerTotal.toFixed(2)}</h3></body></html>`;
   };
 
-  // --- Replaced purchase order generator with the design you provided ---
+  // --- Purchase order with download link for design images ---
   const generatePurchaseOrderHTML = (order: Order) => {
     const itemsHTML = order.order_items
-      .map(
-        (item) => `
+      .map((item) => {
+        const imgUrl = safeUrl(item.product_image);
+        const imageCell = item.product_image
+          ? `<img src="${imgUrl}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px;" alt="${escapeHtml(
+              item.product_name
+            )}"><br><a href="${imgUrl}" download target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:6px;padding:6px 10px;background:#007bff;color:#fff;border-radius:4px;text-decoration:none;">Download Design</a>`
+          : "No image";
+
+        return `
         <tr>
-          <td style="padding: 12px; border: 1px solid #ddd;">
+          <td style="padding: 12px; border: 1px solid #ddd; vertical-align: top;">
             <strong>${escapeHtml(item.product_name)}</strong>
             ${item.clothing_type ? `<br><span style="background:#e3f2fd;padding:2px 6px;border-radius:4px;font-size:12px;">Cloth: ${escapeHtml(item.clothing_type)}</span>` : ""}
             ${item.size ? `<br>Size: <strong>${escapeHtml(item.size)}</strong>` : ""}
@@ -222,12 +238,12 @@ const AdminAIGeneratedOrders = () => {
             ${item.image_position ? `<br><span style="font-size:11px;color:#666;">Image Position: ${escapeHtml(item.image_position)}</span>` : ""}
           </td>
           <td style="padding: 12px; border: 1px solid #ddd; text-align: center; font-size: 18px; font-weight: bold;">${item.quantity}</td>
-          <td style="padding: 12px; border: 1px solid #ddd;">
-            ${item.product_image ? `<img src="${item.product_image}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px;">` : "No image"}
+          <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">
+            ${imageCell}
           </td>
         </tr>
-      `
-      )
+      `;
+      })
       .join("");
 
     return `<!DOCTYPE html>
@@ -347,6 +363,32 @@ const AdminAIGeneratedOrders = () => {
     downloadAsHtml(`ai-po-${order.order_number}.html`, html);
   };
 
+  // download design image helper
+  const downloadDesignImage = async (url: string | null, filename?: string) => {
+    if (!url) {
+      toast.error("No design image available");
+      return;
+    }
+    try {
+      toast("Starting download...");
+      const res = await fetch(url, { mode: "cors" });
+      if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = filename || "design-image";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+      toast.success("Design downloaded");
+    } catch (err: any) {
+      console.error("downloadDesignImage error", err);
+      toast.error("Failed to download design image");
+    }
+  };
+
   const openDetails = (order: Order) => {
     setSelectedOrder(order);
     setDetailsOpen(true);
@@ -463,7 +505,17 @@ const AdminAIGeneratedOrders = () => {
                   {selectedOrder.order_items.map((item) => (
                     <div key={item.id} className="flex items-center gap-4 p-3 border rounded-lg">
                       {item.product_image && (
-                        <img src={item.product_image} alt={item.product_name} className="w-16 h-16 object-cover rounded" />
+                        <div className="flex flex-col items-center">
+                          <img src={item.product_image} alt={item.product_name} className="w-16 h-16 object-cover rounded" />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => downloadDesignImage(item.product_image, `${selectedOrder.order_number}-${item.product_id}.jpg`)}
+                            className="mt-2"
+                          >
+                            <Download className="h-4 w-4 mr-2" />Download Design
+                          </Button>
+                        </div>
                       )}
                       <div className="flex-1">
                         <p className="font-medium">{item.product_name}</p>

@@ -319,8 +319,8 @@ export default function AIGenerator() {
   const [cartOpen, setCartOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
-  const [style, setStyle] = useState("modern");
-  const [colorScheme, setColorScheme] = useState("vibrant");
+  const [style, setStyle] = useState("realistic");
+  const [colorScheme, setColorScheme] = useState("normal");
   const [aspectRatio, setAspectRatio] = useState<"square" | "portrait" | "landscape">("square");
   const [quality, setQuality] = useState<"standard" | "high" | "ultra">("high");
   const [creativity, setCreativity] = useState(70);
