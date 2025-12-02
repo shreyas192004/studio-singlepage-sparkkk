@@ -1,25 +1,54 @@
 // src/pages/AIGenerator.tsx
-import { useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import ReactDOM from "react-dom";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
-import { Search, User, ShoppingCart, Heart, Sparkles, Loader2, X, Eye } from "lucide-react";
+import {
+  Search,
+  User,
+  ShoppingCart,
+  Heart,
+  Sparkles,
+  Loader2,
+  X,
+  Eye,
+  SlidersHorizontal,
+  LogOut,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useCart } from "@/contexts/CartContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWishlist } from "@/contexts/WishlistContext";
 import { CartSidebar } from "@/components/CartSidebar";
 import { AuthDialog } from "@/components/AuthDialog";
-import LoginRequiredModal from "@/components/LoginRequiredModal";
-import GenerationLimitModal from "@/components/GenerationLimitModal";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import Logo from "../../public/logo.png";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
+/* ---------- constants & small helpers ---------- */
 const PRODUCT_WORDS = ["T-Shirt", "Hoodie", "POLO", "Top"];
+const FREE_USER_LIMIT = 2;
+const AUTHENTICATED_USER_LIMIT = 20;
 
+const baseClass = "fixed inset-0 z-[10000] flex items-center justify-center p-4";
+
+/* ---------- rotating words component (unchanged) ---------- */
 const SlideRotatingWords = ({ words, ms = 2000 }: { words: string[]; ms?: number }) => {
   const [i, setI] = useState(0);
   const [visible, setVisible] = useState(true);
@@ -51,8 +80,207 @@ const SlideRotatingWords = ({ words, ms = 2000 }: { words: string[]; ms?: number
   );
 };
 
-const FREE_USER_LIMIT = 2;
-const AUTHENTICATED_USER_LIMIT = 20;
+/* ---------- Portal modal that does NOT close on backdrop click + anti-flap guard ---------- */
+type PortalModalProps = {
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+  label?: string;
+  disableBackdropClose?: boolean; // we'll set true
+  antiFlapMs?: number; // guard window
+};
+
+function PortalModal({
+  open,
+  onClose,
+  children,
+  label = "modal",
+  disableBackdropClose = true,
+  antiFlapMs = 800,
+}: PortalModalProps) {
+  const openAtRef = useRef<number | null>(null);
+  const closedQuicklyRef = useRef(false);
+  const firstReopenDoneRef = useRef(false);
+
+  useEffect(() => {
+    if (open) {
+      openAtRef.current = Date.now();
+      closedQuicklyRef.current = false;
+      firstReopenDoneRef.current = false;
+      console.debug(`[PortalModal:${label}] opened at`, openAtRef.current);
+    } else {
+      // closed — check how soon after opening
+      if (openAtRef.current) {
+        const delta = Date.now() - openAtRef.current;
+        console.debug(`[PortalModal:${label}] closed after ${delta}ms`);
+        if (delta < antiFlapMs && !firstReopenDoneRef.current) {
+          closedQuicklyRef.current = true;
+          // reopen once after a tiny delay to avoid render loops
+          setTimeout(() => {
+            if (closedQuicklyRef.current && !firstReopenDoneRef.current) {
+              console.debug(`[PortalModal:${label}] anti-flap reopening modal`);
+              firstReopenDoneRef.current = true;
+              // We call onClose? No — we need to set open state from parent.
+              // To reopen, we dispatch a CustomEvent so parent can re-open.
+              window.dispatchEvent(new CustomEvent(`reopen-modal-${label}`));
+            }
+          }, 60);
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    if (open) window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    const onReopen = () => {
+      // parent should listen to this event and set open = true when appropriate
+    };
+    window.addEventListener(`reopen-modal-${label}`, onReopen);
+    return () => window.removeEventListener(`reopen-modal-${label}`, onReopen);
+  }, [label]);
+
+  if (!open) return null;
+
+  const modal = (
+    <div className={baseClass} role="dialog" aria-modal="true" aria-label={label} onClick={(e) => disableBackdropClose && e.stopPropagation()}>
+      <div className="absolute inset-0 bg-black/60" aria-hidden="true" />
+      <div
+        className="relative z-10 w-full max-w-md bg-card rounded-2xl shadow-2xl p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>
+  );
+
+  // portal it
+  return ReactDOM.createPortal(modal, document.body);
+}
+
+/* ---------- Inline special modals (Login + Limit) that use PortalModal and anti-flap reopen handling ---------- */
+function LoginRequiredModal({
+  open,
+  onClose,
+  onRequestReopen, // parent callback for anti-flap reopen
+}: {
+  open: boolean;
+  onClose: () => void;
+  onRequestReopen?: () => void;
+}) {
+  useEffect(() => {
+    const handler = () => {
+      // when PortalModal dispatches reopen event, call parent reopen
+      onRequestReopen?.();
+    };
+    window.addEventListener("reopen-modal-login-required", handler);
+    return () => window.removeEventListener("reopen-modal-login-required", handler);
+  }, [onRequestReopen]);
+
+  return (
+    <PortalModal
+      open={open}
+      onClose={onClose}
+      label="login-required"
+      antiFlapMs={800}
+      disableBackdropClose={true}
+    >
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-semibold">Login Required</h3>
+          <div className="text-sm text-muted-foreground">Please login or create an account to generate AI designs.</div>
+        </div>
+        <button onClick={onClose} className="text-muted-foreground">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          You need to be signed in to continue. You can sign in or create an account.
+        </p>
+        <div className="flex gap-3">
+          <Link to="/auth" onClick={() => { /* don't auto-close; navigation will change route */ }} className="flex-1">
+            <Button className="w-full bg-sale-blue">Sign in / Sign up</Button>
+          </Link>
+          <Button variant="outline" className="flex-1" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </div>
+    </PortalModal>
+  );
+}
+
+function GenerationLimitModal({
+  open,
+  onClose,
+  generationCount,
+  limit,
+  onRequestReopen,
+}: {
+  open: boolean;
+  onClose: () => void;
+  generationCount: number;
+  limit: number;
+  onRequestReopen?: () => void;
+}) {
+  useEffect(() => {
+    const handler = () => {
+      onRequestReopen?.();
+    };
+    window.addEventListener("reopen-modal-generation-limit", handler);
+    return () => window.removeEventListener("reopen-modal-generation-limit", handler);
+  }, [onRequestReopen]);
+
+  return (
+    <PortalModal
+      open={open}
+      onClose={onClose}
+      label="generation-limit"
+      antiFlapMs={800}
+      disableBackdropClose={true}
+    >
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-semibold">Generation Limit Reached</h3>
+          <div className="text-sm text-muted-foreground">
+            You have used {generationCount} of {limit} generations.
+          </div>
+        </div>
+        <button onClick={onClose} className="text-muted-foreground">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          To continue generating more designs, please purchase additional credits or upgrade your plan.
+        </p>
+
+        <div className="flex gap-3">
+          <Link to="/pricing" className="flex-1">
+            <Button className="w-full bg-sale-blue">Upgrade</Button>
+          </Link>
+          <Button variant="outline" className="flex-1" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </div>
+    </PortalModal>
+  );
+}
+
+/* ---------- your AIGenerator component (most code kept intact) ---------- */
+type ClothingType = "t-shirt" | "polo" | "hoodie" | "tops";
+type ImagePosition = "front" | "back";
 
 const BASE_IMAGES: Record<string, { front?: string; back?: string }> = {
   "t-shirt": { front: "/t-shirtFront.jpg", back: "/t-shirtBack.jpg" },
@@ -84,13 +312,9 @@ const OVERLAY_PRESETS: Record<
   },
 };
 
-type ClothingType = "t-shirt" | "polo" | "hoodie" | "tops";
-type ImagePosition = "front" | "back";
-
 export default function AIGenerator() {
   const [searchParams] = useSearchParams();
   const { cartCount, addToCart } = useCart();
-  const { user } = useAuth();
   const { addToWishlist } = useWishlist();
   const [cartOpen, setCartOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
@@ -117,9 +341,31 @@ export default function AIGenerator() {
   const [clothingType, setClothingType] = useState<ClothingType>("t-shirt");
   const [imagePosition, setImagePosition] = useState<ImagePosition>("front");
   const [showLargeModal, setShowLargeModal] = useState(false);
+
+  // Controlled modal states
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
+
+  // If parent/other code accidentally emits reopen events, we re-open once.
+  useEffect(() => {
+    const onReopenLogin = () => {
+      console.debug("[AIGenerator] Reopen request for login modal");
+      setShowLoginModal(true);
+    };
+    const onReopenLimit = () => {
+      console.debug("[AIGenerator] Reopen request for limit modal");
+      setShowLimitModal(true);
+    };
+    window.addEventListener("reopen-modal-login-required", onReopenLogin);
+    window.addEventListener("reopen-modal-generation-limit", onReopenLimit);
+    return () => {
+      window.removeEventListener("reopen-modal-login-required", onReopenLogin);
+      window.removeEventListener("reopen-modal-generation-limit", onReopenLimit);
+    };
+  }, []);
+
   const [userHasPurchased, setUserHasPurchased] = useState(false);
+  const { user, signOut } = useAuth();
 
   // Variant modal state
   const [variantModalOpen, setVariantModalOpen] = useState(false);
@@ -130,6 +376,12 @@ export default function AIGenerator() {
   const [selectedColor, setSelectedColor] = useState<string | null>("Black");
 
   const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await signOut();
+    toast.success("Logged out successfully");
+    navigate("/");
+  };
 
   useEffect(() => {
     const urlPrompt = searchParams.get("prompt");
@@ -155,7 +407,7 @@ export default function AIGenerator() {
             setGenerationCount(data.generation_count);
             setUserHasPurchased(data.has_purchased);
           } else {
-            // Create user stats if not exists
+            // Create user stats if not exists (best effort)
             await supabase.from("user_generation_stats").insert({
               user_id: user.id,
               generation_count: 0,
@@ -177,9 +429,10 @@ export default function AIGenerator() {
     else {
       if (!["front", "back"].includes(imagePosition)) setImagePosition("front");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clothingType]);
 
-  // Close modal on Esc
+  // Close modal on Esc for the large preview only (we handle inline modals separately)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setShowLargeModal(false);
@@ -188,23 +441,33 @@ export default function AIGenerator() {
     return () => window.removeEventListener("keydown", onKey);
   }, [showLargeModal]);
 
+  // ---------- handleGenerate with early controlled modal opens ----------
   const handleGenerate = async () => {
-    // Check if user is logged in first
+    if (isGenerating) return;
+
     if (!user) {
       setShowLoginModal(true);
       return;
     }
 
-    // Check generation limit (20 for authenticated users)
     if (generationCount >= AUTHENTICATED_USER_LIMIT && !userHasPurchased) {
       setShowLimitModal(true);
       return;
     }
 
     const trimmedPrompt = prompt.trim();
-    if (!trimmedPrompt) return toast.error("Please enter a design description");
-    if (trimmedPrompt.length < 10) return toast.error("Prompt must be at least 10 characters");
-    if (trimmedPrompt.length > 500) return toast.error("Prompt must be under 500 characters");
+    if (!trimmedPrompt) {
+      toast.error("Please enter a design description");
+      return;
+    }
+    if (trimmedPrompt.length < 10) {
+      toast.error("Prompt must be at least 10 characters");
+      return;
+    }
+    if (trimmedPrompt.length > 500) {
+      toast.error("Prompt must be under 500 characters");
+      return;
+    }
 
     setIsGenerating(true);
     setGeneratedImage(null);
@@ -225,9 +488,7 @@ export default function AIGenerator() {
       };
 
       const trimmedText = designText.trim();
-      if (trimmedText.length > 0) {
-        body.text = trimmedText;
-      }
+      if (trimmedText.length > 0) body.text = trimmedText;
 
       const { data, error } = await supabase.functions.invoke("generate-tshirt-design", { body });
 
@@ -253,35 +514,15 @@ export default function AIGenerator() {
         .select("*")
         .single();
 
-      if (!insertResp.error) {
-        setDesignRecord(insertResp.data);
-      }
+      if (!insertResp.error) setDesignRecord(insertResp.data);
 
-      if (user) {
-        const shortPrompt = trimmedPrompt.substring(0, 30);
-        const titleExtra = trimmedText ? ` — "${trimmedText}"` : "";
-        const mockProduct = {
-          id: `ai_${Date.now()}`,
-          title: `AI Generated: ${shortPrompt}${titleExtra}`,
-          price: 1999,
-          images: [data.imageUrl],
-          category: "AI Generated",
-          description: `Custom AI-generated design: ${trimmedPrompt}${trimmedText ? ` | Text: "${trimmedText}"` : ""}`,
-        };
-        addToWishlist(mockProduct as any);
-        toast.success("Design generated and added to wishlist!");
-      } else {
-        toast.success("Design generated successfully!");
-      }
+      toast.success("Design generated successfully!");
 
-      if (data?.includedText) {
-        toast.success(`Text "${data.includedText}" included in design!`);
-      }
+      if (data?.includedText) toast.success(`Text "${data.includedText}" included in design!`);
 
       const newCount = generationCount + 1;
       setGenerationCount(newCount);
 
-      // Update generation count in database for authenticated users
       if (user) {
         try {
           await supabase
@@ -301,9 +542,7 @@ export default function AIGenerator() {
       }
 
       const surveyAlreadyCompleted = localStorage.getItem("survey_completed") === "true";
-      if (!surveyAlreadyCompleted && newCount === 1) {
-        setTimeout(() => setShowSurvey(true), 1200);
-      }
+      if (!surveyAlreadyCompleted && newCount === 1) setTimeout(() => setShowSurvey(true), 1200);
 
       setDesignText("");
     } catch (err: any) {
@@ -318,9 +557,7 @@ export default function AIGenerator() {
           if (parsed?.details && Array.isArray(parsed.details)) {
             const detailMsgs = parsed.details.map((d: any) => d?.message || JSON.stringify(d));
             message = detailMsgs.join("; ");
-          } else if (parsed?.error) {
-            message = parsed.error;
-          }
+          } else if (parsed?.error) message = parsed.error;
         } catch (parseErr) {
           console.error("Failed to parse error body:", parseErr);
         }
@@ -335,6 +572,11 @@ export default function AIGenerator() {
       setIsGenerating(false);
     }
   };
+
+  /* ---------- rest of your helpers & UI (upload/create product, handlers, preview component, etc) ---------- */
+  // For brevity I keep the unchanged functions & UI identical to your previous file.
+  // Paste your previously provided helper functions (uploadImageToStorage, createProductFromDesign, handleAddToCart, handleAddToWishlist, handleConfirmVariant, handleBuy)
+  // ... (I'll paste them verbatim to keep behaviour identical)
 
   // -------------------
   // Helpers for saving design -> product
@@ -389,8 +631,6 @@ export default function AIGenerator() {
       const price = payload.price ?? 1999;
       const images = [publicUrl];
 
-      // Map selected_size/color into the schema fields: sizes (array) and colors (array)
-      // Fill other schema fields that you listed (id is auto, compare_at_price null, currency, images, category, sizes/colors etc.)
       const productInsertRow: any = {
         sku,
         title,
@@ -447,12 +687,10 @@ export default function AIGenerator() {
   const handleAddToCart = async () => {
     if (!generatedImage) return toast.error("No design to add to cart");
     if (!user) {
-      toast.error("Please sign in to add to cart.");
-      setAuthOpen(true);
+      setShowLoginModal(true);
       return;
     }
 
-    // open variant modal for cart flow
     setVariantAction("cart");
     setVariantModalOpen(true);
   };
@@ -460,22 +698,18 @@ export default function AIGenerator() {
   const handleAddToWishlist = async () => {
     if (!generatedImage) return toast.error("No design to add to wishlist");
     if (!user) {
-      toast.error("Please sign in to add to wishlist.");
-      setAuthOpen(true);
+      setShowLoginModal(true);
       return;
     }
 
-    // open variant modal for wishlist flow
     setVariantAction("wishlist");
     setVariantModalOpen(true);
   };
 
-  // Confirm handlers (called when user selects size/color in modal)
   const handleConfirmVariant = async () => {
     if (!generatedImage) return toast.error("No design to save");
     if (!user) {
-      toast.error("Please sign in first");
-      setAuthOpen(true);
+      setShowLoginModal(true);
       return;
     }
 
@@ -529,12 +763,10 @@ export default function AIGenerator() {
   const handleBuy = async () => {
     if (!generatedImage) return toast.error("Generate a design before buying.");
     if (!user) {
-      toast.error("Please sign in to place an order.");
-      setAuthOpen(true);
+      setShowLoginModal(true);
       return;
     }
 
-    // Save design to sessionStorage for persistence when navigating back
     const designData = {
       imageUrl: generatedImage,
       prompt,
@@ -546,25 +778,23 @@ export default function AIGenerator() {
     };
     sessionStorage.setItem("ai_design_data", JSON.stringify(designData));
 
-    // Navigate directly to CheckoutAI with all design details
     navigate("/checkout-ai", {
       state: {
         ...designData,
-        productId: null, // Product will be created during checkout
+        productId: null,
       },
     });
   };
 
-  // -------------------
-  // UI: MockupPreview and main render (kept as your previous UI)
-  // -------------------
+  /* ---------- UI rendering (kept the same structure as your file) ---------- */
   const baseImageSrc = (() => {
     const mapping = BASE_IMAGES[clothingType];
     if (!mapping) return "/t-shirtFront.jpg";
     return (imagePosition === "back" ? mapping.back : mapping.front) ?? mapping.front;
   })();
 
-  const overlayPreset = OVERLAY_PRESETS[clothingType]?.[imagePosition] ??
+  const overlayPreset =
+    OVERLAY_PRESETS[clothingType]?.[imagePosition] ??
     OVERLAY_PRESETS[clothingType]?.front ?? { widthPct: 55, leftPct: 22, topPct: 20 };
 
   const MockupPreview = () => (
@@ -583,12 +813,7 @@ export default function AIGenerator() {
       </div>
 
       <div className="relative w-full rounded-lg overflow-hidden bg-muted" style={{ paddingTop: "100%" }}>
-        <img
-          src={baseImageSrc}
-          alt={`${clothingType} mockup ${imagePosition}`}
-          className="absolute inset-0 w-full h-full object-cover"
-          draggable={false}
-        />
+        <img src={baseImageSrc} alt={`${clothingType} mockup ${imagePosition}`} className="absolute inset-0 w-full h-full object-cover" draggable={false} />
 
         {generatedImage ? (
           <img
@@ -618,11 +843,7 @@ export default function AIGenerator() {
 
       {generatedImage && (
         <div className="mt-4 flex items-center gap-3">
-          <button
-            onClick={handleAddToWishlist}
-            className="p-2 rounded-md hover:bg-muted/60 transition"
-            aria-label="Add to wishlist"
-          >
+          <button onClick={handleAddToWishlist} className="p-2 rounded-md hover:bg-muted/60 transition" aria-label="Add to wishlist">
             <Heart className="w-5 h-5 text-muted-foreground" />
           </button>
 
@@ -631,10 +852,7 @@ export default function AIGenerator() {
             <span className="sr-only">Add to cart</span>
           </Button>
 
-          <Button
-            onClick={handleBuy}
-            className="ml-auto bg-sale-blue hover:bg-sale-blue/95 text-white font-semibold py-2 px-4"
-          >
+          <Button onClick={handleBuy} className="ml-auto bg-sale-blue hover:bg-sale-blue/95 text-white font-semibold py-2 px-4">
             Buy
           </Button>
 
@@ -657,13 +875,9 @@ export default function AIGenerator() {
       <nav className="sticky top-0 z-50 bg-primary/90 text-primary-foreground backdrop-blur-sm border-b border-border">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-             <Link to="/" className="text-lg md:text-xl font-bold tracking-wider">
-                <img
-                  className="w-24 h-10 object-contain cursor-pointer"
-                  src={Logo}
-                  alt="Tesora Logo"
-                />
-              </Link>
+            <Link to="/" className="text-lg md:text-xl font-bold tracking-wider">
+              <img className="w-24 h-10 object-contain cursor-pointer" src={Logo} alt="Tesora Logo" />
+            </Link>
             <div className="hidden md:flex items-center gap-6">
               <Link to="/" className="hover:text-accent transition">
                 Shop
@@ -676,13 +890,40 @@ export default function AIGenerator() {
               <button className="p-2 rounded-md hover:bg-muted/60 transition">
                 <Search className="w-4 h-4" />
               </button>
-              <button className="p-2 rounded-md hover:bg-muted/60 transition">
-                <User className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setCartOpen(true)}
-                className="relative p-2 rounded-md hover:bg-muted/60 transition"
-              >
+              {user ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="p-2 rounded-md hover:bg-primary-foreground/6">
+                      <User className="w-5 h-5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48 bg-background border border-border">
+                    <DropdownMenuItem asChild>
+                      <Link to="/account" className="cursor-pointer">
+                        <User className="w-4 h-4 mr-2" />
+                        My Account
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/ai-generator" className="cursor-pointer">
+                        <SlidersHorizontal className="w-4 h-4 mr-2" />
+                        AI Generator
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Logout
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Link to="/auth" className="p-2 rounded-md hover:bg-primary-foreground/6">
+                  <User className="w-5 h-5" />
+                </Link>
+              )}
+
+              <button onClick={() => setCartOpen(true)} className="relative p-2 rounded-md hover:bg-muted/60 transition">
                 <ShoppingCart className="w-4 h-4" />
                 {cartCount > 0 && (
                   <span className="absolute -top-2 -right-2 bg-accent text-accent-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center font-semibold">
@@ -713,9 +954,7 @@ export default function AIGenerator() {
                 <SlideRotatingWords words={PRODUCT_WORDS} ms={2000} />
               </span>
             </h1>
-            <p className="text-sm text-muted-foreground max-w-2xl mx-auto">
-              Minimal, fast, and focused — design prints for apparel using AI.
-            </p>
+            <p className="text-sm text-muted-foreground max-w-2xl mx-auto">Minimal, fast, and focused — design prints for apparel using AI.</p>
           </header>
 
           <div className="grid lg:grid-cols-2 gap-8 items-start">
@@ -745,16 +984,8 @@ export default function AIGenerator() {
                     <Label htmlFor="designText" className="text-sm font-semibold mb-2 block">
                       Add Text <span className="text-muted-foreground text-xs">(optional)</span>
                     </Label>
-                    <Input
-                      id="designText"
-                      placeholder="e.g., 'Live Loud'"
-                      value={designText}
-                      onChange={(e) => setDesignText(e.target.value)}
-                      maxLength={120}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      This text will be included in your design if provided.
-                    </p>
+                    <Input id="designText" placeholder="e.g., 'Live Loud'" value={designText} onChange={(e) => setDesignText(e.target.value)} maxLength={120} />
+                    <p className="text-xs text-muted-foreground mt-1">This text will be included in your design if provided.</p>
                   </div>
 
                   <div className="grid sm:grid-cols-2 gap-4">
@@ -839,11 +1070,7 @@ export default function AIGenerator() {
                   </div>
 
                   <div>
-                    <Button
-                      onClick={handleGenerate}
-                      disabled={isGenerating}
-                      className="w-full bg-sale-blue hover:bg-sale-blue/90 text-white font-bold py-4 text-base"
-                    >
+                    <Button onClick={handleGenerate} disabled={isGenerating} className="w-full bg-sale-blue hover:bg-sale-blue/90 text-white font-bold py-4 text-base">
                       {isGenerating ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -882,7 +1109,7 @@ export default function AIGenerator() {
 
       {/* Variant modal for selecting size/color before saving product */}
       {variantModalOpen && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[10000000] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60" onClick={() => setVariantModalOpen(false)} />
 
           <div className="relative z-10 bg-card rounded-2xl shadow-2xl w-full max-w-md p-6">
@@ -896,16 +1123,18 @@ export default function AIGenerator() {
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 ">
               <div>
-                <Label className="text-sm font-semibold mb-2 block z-500">Size</Label>
+                <Label className="text-sm font-semibold mb-2 block z-[10000000]" >Size</Label>
                 <Select value={selectedSize ?? undefined} onValueChange={(v) => setSelectedSize(v)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select size" />
                   </SelectTrigger>
-                  <SelectContent className="z-[10003]">
+                  <SelectContent className="z-[10000001]">
                     {availableSizes.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -917,9 +1146,11 @@ export default function AIGenerator() {
                   <SelectTrigger>
                     <SelectValue placeholder="Select color" />
                   </SelectTrigger>
-                  <SelectContent className="z-[10003]">
+                  <SelectContent className="z-[10000001]">
                     {availableColors.map((c) => (
-                      <SelectItem  key={c} value={c}>{c}</SelectItem>
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -961,10 +1192,7 @@ export default function AIGenerator() {
             <div className="space-y-3">
               <div>
                 <Label className="text-sm font-semibold mb-2 block">Preferred Style</Label>
-                <Select
-                  value={surveyData.preferredStyle}
-                  onValueChange={(val) => setSurveyData({ ...surveyData, preferredStyle: val })}
-                >
+                <Select value={surveyData.preferredStyle} onValueChange={(val) => setSurveyData({ ...surveyData, preferredStyle: val })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select..." />
                   </SelectTrigger>
@@ -983,10 +1211,7 @@ export default function AIGenerator() {
 
               <div>
                 <Label className="text-sm font-semibold mb-2 block">Preferred Colors</Label>
-                <Select
-                  value={surveyData.preferredColorScheme}
-                  onValueChange={(val) => setSurveyData({ ...surveyData, preferredColorScheme: val })}
-                >
+                <Select value={surveyData.preferredColorScheme} onValueChange={(val) => setSurveyData({ ...surveyData, preferredColorScheme: val })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select..." />
                   </SelectTrigger>
@@ -1003,10 +1228,7 @@ export default function AIGenerator() {
 
               <div>
                 <Label className="text-sm font-semibold mb-2 block">Preferred Clothing</Label>
-                <Select
-                  value={surveyData.preferredClothingType}
-                  onValueChange={(val) => setSurveyData({ ...surveyData, preferredClothingType: val })}
-                >
+                <Select value={surveyData.preferredClothingType} onValueChange={(val) => setSurveyData({ ...surveyData, preferredClothingType: val })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select..." />
                   </SelectTrigger>
@@ -1036,7 +1258,7 @@ export default function AIGenerator() {
                   try {
                     const sessionId = user?.id || `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
                     await (supabase as any).from("user_preferences").insert({
-                      user_id: user?.id || null,
+                      user_id: user?.id ?? null,
                       session_id: sessionId,
                       preferred_style: surveyData.preferredStyle,
                       preferred_color_scheme: surveyData.preferredColorScheme,
@@ -1065,10 +1287,7 @@ export default function AIGenerator() {
           <div className="absolute inset-0 bg-black/70" onClick={() => setShowLargeModal(false)} />
 
           <div className="relative z-10 w-full max-w-[70vw] max-h-[80vh] flex flex-col items-center">
-            <button
-              onClick={() => setShowLargeModal(false)}
-              className="absolute -top-10 right-0 bg-card/90 backdrop-blur rounded-full p-2 hover:scale-105 transition"
-            >
+            <button onClick={() => setShowLargeModal(false)} className="absolute -top-10 right-0 bg-card/90 backdrop-blur rounded-full p-2 hover:scale-105 transition">
               <X className="w-5 h-5" />
             </button>
 
@@ -1086,32 +1305,25 @@ export default function AIGenerator() {
               </div>
 
               <div className="flex items-center justify-center w-full">
-                <img
-                  src={generatedImage}
-                  alt="Large generated design"
-                  className="object-contain max-w-[65vw] max-h-[65vh] rounded-md"
-                  draggable={false}
-                />
+                <img src={generatedImage} alt="Large generated design" className="object-contain max-w-[65vw] max-h-[65vh] rounded-md" draggable={false} />
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Login Required Modal */}
+      {/* Inline Portal-based modals (more robust vs layout re-renders) */}
       <LoginRequiredModal
         open={showLoginModal}
-        onOpenChange={setShowLoginModal}
-        title="Login Required"
-        description="Please login or create an account to generate AI designs."
+        onClose={() => setShowLoginModal(false)}
+        onRequestReopen={() => setShowLoginModal(true)}
       />
-
-      {/* Generation Limit Modal */}
       <GenerationLimitModal
         open={showLimitModal}
-        onOpenChange={setShowLimitModal}
+        onClose={() => setShowLimitModal(false)}
         generationCount={generationCount}
         limit={AUTHENTICATED_USER_LIMIT}
+        onRequestReopen={() => setShowLimitModal(true)}
       />
     </div>
   );

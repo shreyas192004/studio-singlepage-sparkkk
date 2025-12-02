@@ -98,7 +98,7 @@ const AdminAIGeneratedOrders = () => {
       // Fetch AI-generated products
       const { data: products } = await supabase
         .from("products")
-        .select("id, title, clothing_type, image_position")
+        .select("id, title, clothing_type, image_position, sizes, colors")
         .eq("is_ai_generated", true);
 
       const productIds = products?.map((p) => p.id) || [];
@@ -362,7 +362,7 @@ const AdminAIGeneratedOrders = () => {
     <div className="min-h-screen bg-background">
       <header className="border-b">
         <div className="container mx-auto px-4 py-4 flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/admin/dashboard")}>
+          <Button variant="ghost" size="icon" onClick={() => navigate("/admintesora/dashboard")}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <h1 className="text-2xl font-bold">AI Generated Orders (Admin)</h1>
