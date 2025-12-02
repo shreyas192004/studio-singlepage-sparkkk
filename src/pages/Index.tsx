@@ -46,6 +46,7 @@ const Index: React.FC = () => {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [allProducts, setAllProducts] = useState<any[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handleLogout = async () => {
     await signOut();
@@ -109,7 +110,9 @@ const Index: React.FC = () => {
     const priceMatch = product.price >= priceRange[0] && product.price <= priceRange[1];
     const categoryMatch = selectedCategories.length === 0 || selectedCategories.includes(product.category);
     const colorMatch = selectedColors.length === 0 || selectedColors.includes(product.color);
-    return priceMatch && categoryMatch && colorMatch;
+    const searchMatch = searchQuery.trim() === "" || 
+      product.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return priceMatch && categoryMatch && colorMatch && searchMatch;
   });
 
   // Apply sorting
@@ -196,9 +199,16 @@ const Index: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-3">
-              <button className="p-2 rounded-md hover:bg-primary-foreground/6 hidden sm:inline-flex" aria-label="Search">
-                <Search className="w-5 h-5" />
-              </button>
+              <div className="relative hidden sm:block">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search products..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 w-48 lg:w-64 bg-primary-foreground/10 border-primary-foreground/20"
+                />
+              </div>
 
               {user ? (
                 <DropdownMenu>
