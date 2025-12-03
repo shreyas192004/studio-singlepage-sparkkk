@@ -874,7 +874,11 @@ export default function AIGenerator() {
 
           <div className="grid lg:grid-cols-2 gap-8 items-start">
             <section className="space-y-6 order-2 lg:order-1">
-              <form className="bg-card rounded-2xl p-6 shadow-sm border border-border">
+              <form className="bg-card rounded-2xl p-6 shadow-sm border border-border"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleGenerate();
+                }}>
                 <div className="flex items-start justify-between mb-4">
                   <h2 className="text-lg font-semibold">Design Settings</h2>
                   <div className="text-sm text-muted-foreground">Quick options</div>
@@ -985,7 +989,7 @@ export default function AIGenerator() {
                   </div>
 
                   <div>
-                    <Button onClick={handleGenerate} disabled={isGenerating} className="w-full bg-sale-blue hover:bg-sale-blue/90 text-white font-bold py-4 text-base">
+                    <Button type="submit" disabled={isGenerating} className="w-full bg-sale-blue hover:bg-sale-blue/90 text-white font-bold py-4 text-base">
                       {isGenerating ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
