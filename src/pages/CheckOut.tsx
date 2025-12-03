@@ -182,150 +182,180 @@ export const CheckoutPage = () => {
   };
 
   const confirmAndPlaceOrder = async () => {
-    setShowConfirmDialog(false);
-    setIsProcessing(true);
+  setShowConfirmDialog(false);
+  setIsProcessing(true);
 
-    try {
-      // Generate order number
-      const newOrderId = `ORD${Date.now().toString().slice(-8)}`;
+  try {
+    // Generate order number
+    const newOrderId = `ORD${Date.now().toString().slice(-8)}`;
 
-      // First, create shipping address
-      const { data: addressData, error: addressError } = await supabase
-        .from('addresses')
-        .insert({
-          user_id: user!.id,
-          address_type: 'shipping',
-          full_name: formData.name,
-          phone: formData.phone,
-          address_line1: formData.address,
-          city: formData.city,
-          state: formData.city, // Using city as state for now
-          postal_code: formData.pincode,
-          country: 'India',
-        })
-        .select()
+    // 1) Create shipping address
+    const { data: addressData, error: addressError } = await supabase
+      .from('addresses')
+      .insert({
+        user_id: user!.id,
+        address_type: 'shipping',
+        full_name: formData.name,
+        phone: formData.phone,
+        address_line1: formData.address,
+        city: formData.city,
+        state: formData.city, // Using city as state for now
+        postal_code: formData.pincode,
+        country: 'India',
+      })
+      .select()
+      .single();
+
+    if (addressError) throw addressError;
+
+    // 2) Generate and upload invoice to storage
+    const invoiceHTML = generateInvoiceHTML(newOrderId);
+    const blob = new Blob([invoiceHTML], { type: 'text/html' });
+    
+    const { error: uploadError } = await supabase.storage
+      .from('invoices')
+      .upload(`${newOrderId}.html`, blob, {
+        contentType: 'text/html',
+        upsert: true,
+      });
+
+    if (uploadError) throw uploadError;
+
+    // 3) Get public URL for the invoice
+    const { data: urlData } = supabase.storage
+      .from('invoices')
+      .getPublicUrl(`${newOrderId}.html`);
+
+    // 4) Insert order into database with invoice URL and address
+    const { data: orderData, error: orderError } = await supabase
+      .from('orders')
+      .insert({
+        user_id: user!.id,
+        order_number: newOrderId,
+        total_amount: finalTotal,
+        status: 'pending',
+        payment_status: 'pending',
+        payment_method: 'cash_on_delivery',
+        shipping_address_id: addressData.id,
+        billing_address_id: addressData.id,
+        invoice_url: urlData.publicUrl,
+        notes: appliedCoupon
+          ? `Coupon: ${appliedCoupon.code} (-₹${appliedCoupon.discount})${
+              firstOrderDiscount > 0
+                ? `, First Order Discount (-₹${firstOrderDiscount})`
+                : ''
+            }`
+          : firstOrderDiscount > 0
+          ? `First Order Discount (-₹${firstOrderDiscount})`
+          : null,
+      })
+      .select()
+      .single();
+
+    if (orderError) throw orderError;
+
+    // 5) Update coupon usage if coupon was applied
+    if (appliedCoupon) {
+      const { data: couponData } = await supabase
+        .from('coupon_codes')
+        .select('current_uses')
+        .eq('code', appliedCoupon.code)
         .single();
-
-      if (addressError) throw addressError;
-
-      // Generate and upload invoice to storage
-      const invoiceHTML = generateInvoiceHTML(newOrderId);
-      const blob = new Blob([invoiceHTML], { type: 'text/html' });
       
-      const { error: uploadError } = await supabase.storage
-        .from('invoices')
-        .upload(`${newOrderId}.html`, blob, {
-          contentType: 'text/html',
-          upsert: true,
-        });
+      if (couponData) {
+        await supabase
+          .from('coupon_codes')
+          .update({ current_uses: couponData.current_uses + 1 })
+          .eq('code', appliedCoupon.code);
+      }
+    }
 
-      if (uploadError) throw uploadError;
-
-      // Get public URL for the invoice
-      const { data: urlData } = supabase.storage
-        .from('invoices')
-        .getPublicUrl(`${newOrderId}.html`);
-
-      // Insert order into database with invoice URL and address
-      const { data: orderData, error: orderError } = await supabase
-        .from('orders')
-        .insert({
-          user_id: user!.id,
-          order_number: newOrderId,
-          total_amount: finalTotal,
-          status: 'pending',
-          payment_status: 'pending',
-          payment_method: 'cash_on_delivery',
-          shipping_address_id: addressData.id,
-          billing_address_id: addressData.id,
-          invoice_url: urlData.publicUrl,
-          notes: appliedCoupon ? `Coupon: ${appliedCoupon.code} (-₹${appliedCoupon.discount})${firstOrderDiscount > 0 ? `, First Order Discount (-₹${firstOrderDiscount})` : ''}` : (firstOrderDiscount > 0 ? `First Order Discount (-₹${firstOrderDiscount})` : null),
-        })
-        .select()
+    // 6) Update first order discount tracking if used
+    if (firstOrderDiscount > 0 && user) {
+      const { data: existingStats } = await supabase
+        .from('user_order_stats')
+        .select('*')
+        .eq('user_id', user.id)
         .single();
 
-      if (orderError) throw orderError;
-
-      // Update coupon usage if coupon was applied
-      if (appliedCoupon) {
-        const { data: couponData } = await supabase
-          .from('coupon_codes')
-          .select('current_uses')
-          .eq('code', appliedCoupon.code)
-          .single();
-        
-        if (couponData) {
-          await supabase
-            .from('coupon_codes')
-            .update({ current_uses: couponData.current_uses + 1 })
-            .eq('code', appliedCoupon.code);
-        }
-      }
-
-      // Update first order discount tracking if used
-      if (firstOrderDiscount > 0 && user) {
-        const { data: existingStats } = await supabase
+      if (existingStats) {
+        await supabase
           .from('user_order_stats')
-          .select('*')
+          .update({ 
+            first_order_discount_used: true,
+            order_count: existingStats.order_count + 1,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', user.id);
+      } else {
+        await supabase
+          .from('user_order_stats')
+          .insert({
+            user_id: user.id,
+            order_count: 1,
+            first_order_discount_used: true,
+          });
+      }
+    }
+
+    // 7) Insert order items
+    const orderItems = cart.map(item => ({
+      order_id: orderData.id,
+      product_id: item.id.toString(),
+      product_name: item.name,
+      product_image: item.image,
+      quantity: item.quantity,
+      unit_price: item.price,
+      total_price: item.price * item.quantity,
+      size: item.size || null,
+      color: item.color || null,
+    }));
+
+    const { error: itemsError } = await supabase
+      .from('order_items')
+      .insert(orderItems);
+
+    if (itemsError) throw itemsError;
+
+    // 8) 🔁 RESET AI GENERATION COUNT IF >= 20
+    if (user) {
+      try {
+        const { data: genStats, error: genError } = await supabase
+          .from('user_generation_stats')
+          .select('generation_count')
           .eq('user_id', user.id)
           .single();
 
-        if (existingStats) {
+        if (!genError && genStats && genStats.generation_count >= 20) {
           await supabase
-            .from('user_order_stats')
-            .update({ 
-              first_order_discount_used: true,
-              order_count: existingStats.order_count + 1,
-              updated_at: new Date().toISOString()
+            .from('user_generation_stats')
+            .update({
+              generation_count: 0,
+              updated_at: new Date().toISOString(),
             })
             .eq('user_id', user.id);
-        } else {
-          await supabase
-            .from('user_order_stats')
-            .insert({
-              user_id: user.id,
-              order_count: 1,
-              first_order_discount_used: true,
-            });
         }
+      } catch (err) {
+        console.error('Error resetting generation count:', err);
       }
-
-      // Insert order items
-      const orderItems = cart.map(item => ({
-        order_id: orderData.id,
-        product_id: item.id.toString(),
-        product_name: item.name,
-        product_image: item.image,
-        quantity: item.quantity,
-        unit_price: item.price,
-        total_price: item.price * item.quantity,
-        size: item.size || null,
-        color: item.color || null,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItems);
-
-      if (itemsError) throw itemsError;
-
-      // Set order as placed
-      setOrderId(newOrderId);
-      setOrderPlaced(true);
-
-      // Auto-download invoice
-      setTimeout(() => {
-        generateInvoicePDF(newOrderId);
-      }, 500);
-
-      toast.success('Order placed successfully!');
-    } catch (error: any) {
-      console.error('Error placing order:', error);
-      toast.error(error.message || 'Failed to place order. Please try again.');
-    } finally {
-      setIsProcessing(false);
     }
-  };
+
+    // 9) Final UI updates
+    setOrderId(newOrderId);
+    setOrderPlaced(true);
+
+    setTimeout(() => {
+      generateInvoicePDF(newOrderId);
+    }, 500);
+
+    toast.success('Order placed successfully!');
+  } catch (error: any) {
+    console.error('Error placing order:', error);
+    toast.error(error.message || 'Failed to place order. Please try again.');
+  } finally {
+    setIsProcessing(false);
+  }
+};
 
   const generateInvoiceHTML = (orderNumber: string) => {
     const invoiceDate = new Date().toLocaleDateString('en-IN', {

@@ -369,158 +369,193 @@ const CheckoutAI: React.FC = () => {
   };
 
   // ---------- main place order ----------
-  const placeOrder = async () => {
-    if (!user) {
-      toast.error("Please sign in to place the order.");
-      return;
-    }
-    if (!size || !color) {
-      toast.error("Please select size and color.");
-      return;
-    }
-    if (!formData.name || !formData.email || !formData.address || !formData.city || !formData.pincode || !formData.phone) {
-      toast.error("Please fill in all address fields.");
-      return;
+  // ---------- main place order ----------
+const placeOrder = async () => {
+  if (!user) {
+    toast.error("Please sign in to place the order.");
+    return;
+  }
+  if (!size || !color) {
+    toast.error("Please select size and color.");
+    return;
+  }
+  if (!formData.name || !formData.email || !formData.address || !formData.city || !formData.pincode || !formData.phone) {
+    toast.error("Please fill in all address fields.");
+    return;
+  }
+
+  setIsPlacing(true);
+  toast.loading("Placing order...");
+
+  try {
+    const orderNumber = `ORD-${Date.now().toString().slice(-8)}`;
+    const total = finalTotal;
+
+    // 0) Create shipping address
+    const { data: addressData, error: addressError } = await supabase
+      .from('addresses')
+      .insert({
+        user_id: user.id,
+        address_type: 'shipping',
+        full_name: formData.name,
+        phone: formData.phone,
+        address_line1: formData.address,
+        city: formData.city,
+        state: formData.city,
+        postal_code: formData.pincode,
+        country: 'India',
+      })
+      .select()
+      .single();
+
+    if (addressError) {
+      console.error("Address creation error:", addressError);
+      throw new Error("Failed to save shipping address");
     }
 
-    setIsPlacing(true);
-    toast.loading("Placing order...");
+    // 1) If product already exists (passed from generator), use it. Otherwise create product now.
+    let productIdToUse: string | null = existingProductId ?? null;
+    let aiDesignPublicUrl: string | null = null;
+
+    if (!productIdToUse) {
+      if (!imageUrl) throw new Error("No image to create product from.");
+      try {
+        const { product, publicUrl } = await createProductForAiDesign(imageUrl, {
+          title: `AI Design — ${prompt?.slice(0, 30)}`,
+          description: `Custom AI design — prompt: ${prompt}`,
+          price,
+          ai_generation_id: aiGenerationId ?? null,
+        });
+        productIdToUse = product.id;
+        aiDesignPublicUrl = publicUrl;
+      } catch (err: any) {
+        console.warn(
+          "Could not create product; attempting to continue with imageUrl for order_items:",
+          err?.message || err
+        );
+        aiDesignPublicUrl = imageUrl;
+      }
+    } else {
+      const { data: existingProduct } = await supabase
+        .from("products")
+        .select("id, images")
+        .eq("id", productIdToUse)
+        .single();
+      aiDesignPublicUrl = existingProduct?.images?.[0] ?? imageUrl;
+    }
+
+    // 2) Generate invoices HTML
+    const invoiceHTML = generateInvoiceHTML(orderNumber, aiDesignPublicUrl ?? imageUrl ?? undefined);
+    const purchaseHTML = generatePurchaseInvoiceHTML(orderNumber, aiDesignPublicUrl ?? imageUrl ?? undefined);
+
+    // 3) Upload invoices
+    const invoiceBlob = new Blob([invoiceHTML], { type: "text/html" });
+    const purchaseBlob = new Blob([purchaseHTML], { type: "text/html" });
 
     try {
-      const orderNumber = `ORD-${Date.now().toString().slice(-8)}`;
-      const total = finalTotal;
-
-      // 0) Create shipping address
-      const { data: addressData, error: addressError } = await supabase
-        .from('addresses')
-        .insert({
-          user_id: user.id,
-          address_type: 'shipping',
-          full_name: formData.name,
-          phone: formData.phone,
-          address_line1: formData.address,
-          city: formData.city,
-          state: formData.city,
-          postal_code: formData.pincode,
-          country: 'India',
-        })
-        .select()
-        .single();
-
-      if (addressError) {
-        console.error("Address creation error:", addressError);
-        throw new Error("Failed to save shipping address");
-      }
-
-      // 1) If product already exists (passed from generator), use it. Otherwise create product now.
-      let productIdToUse: string | null = existingProductId ?? null;
-      let aiDesignPublicUrl: string | null = null;
-
-      if (!productIdToUse) {
-        if (!imageUrl) throw new Error("No image to create product from.");
-        try {
-          const { product, publicUrl } = await createProductForAiDesign(imageUrl, {
-            title: `AI Design — ${prompt?.slice(0, 30)}`,
-            description: `Custom AI design — prompt: ${prompt}`,
-            price,
-            ai_generation_id: aiGenerationId ?? null,
-          });
-          productIdToUse = product.id;
-          aiDesignPublicUrl = publicUrl;
-        } catch (err: any) {
-          console.warn("Could not create product; attempting to continue with imageUrl for order_items:", err?.message || err);
-          // If product creation fails due to storage/RLS, we'll still create the order and order_item using the design URL.
-          aiDesignPublicUrl = imageUrl;
-        }
-      } else {
-        // If product existed, try to fetch its images for linking
-        const { data: existingProduct } = await supabase.from("products").select("id, images").eq("id", productIdToUse).single();
-        aiDesignPublicUrl = existingProduct?.images?.[0] ?? imageUrl;
-      }
-
-      // 2) Generate invoices HTML
-      const invoiceHTML = generateInvoiceHTML(orderNumber, aiDesignPublicUrl ?? imageUrl ?? undefined);
-      const purchaseHTML = generatePurchaseInvoiceHTML(orderNumber, aiDesignPublicUrl ?? imageUrl ?? undefined);
-
-      // 3) Upload invoices to storage as files (invoices, purchase-invoice)
-      const invoiceBlob = new Blob([invoiceHTML], { type: "text/html" });
-      const purchaseBlob = new Blob([purchaseHTML], { type: "text/html" });
-
-      try {
-        await uploadToBucket("invoices", `${orderNumber}.html`, invoiceBlob, "text/html");
-      } catch (e) {
-        console.warn("Invoice upload failed:", e);
-      }
-      try {
-        await uploadToBucket("purchase-invoice", `${orderNumber}.html`, purchaseBlob, "text/html");
-      } catch (e) {
-        console.warn("Purchase invoice upload failed:", e);
-      }
-
-      // 4) Create order row
-      const { data: orderData, error: orderError } = await supabase
-        .from("orders")
-        .insert({
-          user_id: user.id,
-          order_number: orderNumber,
-          total_amount: total,
-          currency: "INR",
-          status: "processing",
-          payment_method: "cash_on_delivery",
-          payment_status: "pending",
-          shipping_address_id: addressData.id,
-          billing_address_id: addressData.id,
-          invoice_url: `/invoices/${orderNumber}.html`,
-          notes: aiDesignPublicUrl ? `AI design uploaded: ${aiDesignPublicUrl}` : (imageUrl ? `Original design: ${imageUrl}` : null),
-        } as any)
-        .select("id, order_number")
-        .single();
-
-      if (orderError || !orderData) {
-        console.error("Order insert error:", orderError);
-        throw new Error(orderError?.message || "Failed to create order");
-      }
-
-      // 5) Insert order_item record referencing product when available
-      const orderItemRow: any = {
-        order_id: orderData.id,
-        product_id: productIdToUse ?? null,
-        product_name: `Custom AI ${clothingType}`,
-        product_image: aiDesignPublicUrl ?? imageUrl,
-        quantity,
-        unit_price: price,
-        total_price: price * quantity,
-        size,
-        color,
-      };
-
-      const { error: itemError } = await supabase.from("order_items").insert(orderItemRow as any);
-
-      if (itemError) {
-        console.error("order_items insert error:", itemError);
-        throw new Error(itemError.message || "Failed to create order item");
-      }
-
-      // 6) Auto-download invoices locally for user convenience
-      setTimeout(() => {
-        try {
-          downloadBlob(new Blob([invoiceHTML], { type: "text/html" }), `Invoice_${orderNumber}.html`);
-          downloadBlob(new Blob([purchaseHTML], { type: "text/html" }), `PurchaseInvoice_${orderNumber}.html`);
-        } catch (e) {
-          console.warn("Failed to auto-download invoices:", e);
-        }
-      }, 600);
-
-      toast.success("Order placed — design uploaded and invoices created.");
-      navigate(`/order-confirmation/${orderData.order_number ?? orderNumber}`, { replace: true });
-    } catch (err: any) {
-      console.error("Place order error:", err);
-      toast.error(err?.message || "Failed to place order. Try again.");
-    } finally {
-      setIsPlacing(false);
-      toast.dismiss();
+      await uploadToBucket("invoices", `${orderNumber}.html`, invoiceBlob, "text/html");
+    } catch (e) {
+      console.warn("Invoice upload failed:", e);
     }
-  };
+    try {
+      await uploadToBucket("purchase-invoice", `${orderNumber}.html`, purchaseBlob, "text/html");
+    } catch (e) {
+      console.warn("Purchase invoice upload failed:", e);
+    }
+
+    // 4) Create order row
+    const { data: orderData, error: orderError } = await supabase
+      .from("orders")
+      .insert({
+        user_id: user.id,
+        order_number: orderNumber,
+        total_amount: total,
+        currency: "INR",
+        status: "processing",
+        payment_method: "cash_on_delivery",
+        payment_status: "pending",
+        shipping_address_id: addressData.id,
+        billing_address_id: addressData.id,
+        invoice_url: `/invoices/${orderNumber}.html`,
+        notes: aiDesignPublicUrl
+          ? `AI design uploaded: ${aiDesignPublicUrl}`
+          : imageUrl
+          ? `Original design: ${imageUrl}`
+          : null,
+      } as any)
+      .select("id, order_number")
+      .single();
+
+    if (orderError || !orderData) {
+      console.error("Order insert error:", orderError);
+      throw new Error(orderError?.message || "Failed to create order");
+    }
+
+    // 5) Insert order_item
+    const orderItemRow: any = {
+      order_id: orderData.id,
+      product_id: productIdToUse ?? null,
+      product_name: `Custom AI ${clothingType}`,
+      product_image: aiDesignPublicUrl ?? imageUrl,
+      quantity,
+      unit_price: price,
+      total_price: price * quantity,
+      size,
+      color,
+    };
+
+    const { error: itemError } = await supabase
+      .from("order_items")
+      .insert(orderItemRow as any);
+
+    if (itemError) {
+      console.error("order_items insert error:", itemError);
+      throw new Error(itemError.message || "Failed to create order item");
+    }
+
+    // 6) 🔁 RESET AI GENERATION COUNT IF >= 20
+    try {
+      const { data: genStats, error: genError } = await supabase
+        .from("user_generation_stats")
+        .select("generation_count")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!genError && genStats && genStats.generation_count >= 20) {
+        await supabase
+          .from("user_generation_stats")
+          .update({
+            generation_count: 0,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("user_id", user.id);
+      }
+    } catch (err) {
+      console.error("Error resetting generation count after AI checkout:", err);
+      // don't block order success if this fails
+    }
+
+    // 7) Auto-download invoices
+    setTimeout(() => {
+      try {
+        downloadBlob(new Blob([invoiceHTML], { type: "text/html" }), `Invoice_${orderNumber}.html`);
+        downloadBlob(new Blob([purchaseHTML], { type: "text/html" }), `PurchaseInvoice_${orderNumber}.html`);
+      } catch (e) {
+        console.warn("Failed to auto-download invoices:", e);
+      }
+    }, 600);
+
+    toast.success("Order placed — design uploaded and invoices created.");
+    navigate(`/order-confirmation/${orderData.order_number ?? orderNumber}`, { replace: true });
+  } catch (err: any) {
+    console.error("Place order error:", err);
+    toast.error(err?.message || "Failed to place order. Try again.");
+  } finally {
+    setIsPlacing(false);
+    toast.dismiss();
+  }
+};
+
 
   // ---------- UI ----------
   return (

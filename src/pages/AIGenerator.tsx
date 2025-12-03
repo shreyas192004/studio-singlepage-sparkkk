@@ -172,17 +172,15 @@ function GenerationLimitModal({
   generationCount: number;
   limit: number;
 }) {
+  const navigate = useNavigate(); // ⚡ Add nav
+
   return (
-    <PortalModal
-      open={open}
-      onClose={onClose}
-      label="generation-limit"
-    >
+    <PortalModal open={open} onClose={onClose} label="generation-limit">
       <div className="flex items-start justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold">Generation Limit Reached</h3>
           <div className="text-sm text-muted-foreground">
-            You have used {generationCount} of {limit} generations.
+            You have used {generationCount} of {limit} free generations.
           </div>
         </div>
         <button onClick={onClose} className="text-muted-foreground">
@@ -192,13 +190,20 @@ function GenerationLimitModal({
 
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          To continue generating more designs, please purchase additional credits or upgrade your plan.
+          Place an order to continue generating more custom designs.
         </p>
 
         <div className="flex gap-3">
-          <Link to="/pricing" className="flex-1">
-            <Button className="w-full bg-sale-blue">Upgrade</Button>
-          </Link>
+          <Button
+            className="flex-1 bg-sale-blue"
+            onClick={() => {
+              onClose();
+              navigate("/"); // Redirect to shop/cart/checkout page
+            }}
+          >
+            Place Order
+          </Button>
+
           <Button variant="outline" className="flex-1" onClick={onClose}>
             Close
           </Button>
@@ -207,6 +212,7 @@ function GenerationLimitModal({
     </PortalModal>
   );
 }
+
 
 /* ---------- your AIGenerator component (most code kept intact) ---------- */
 type ClothingType = "t-shirt" | "polo" | "hoodie" | "tops";
@@ -276,7 +282,7 @@ export default function AIGenerator() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
 
-  const [userHasPurchased, setUserHasPurchased] = useState(false);
+  // const [userHasPurchased, setUserHasPurchased] = useState(false);
   const { user, signOut } = useAuth();
 
   // Variant modal state
@@ -317,7 +323,7 @@ export default function AIGenerator() {
 
           if (!error && data) {
             setGenerationCount(data.generation_count);
-            setUserHasPurchased(data.has_purchased);
+            // setUserHasPurchased(data.has_purchased);
           } else {
             // Create user stats if not exists (best effort)
             await supabase.from("user_generation_stats").insert({
@@ -362,7 +368,7 @@ export default function AIGenerator() {
       return;
     }
 
-    if (generationCount >= AUTHENTICATED_USER_LIMIT && !userHasPurchased) {
+    if (generationCount >= AUTHENTICATED_USER_LIMIT ) {
       setShowLimitModal(true);
       return;
     }
