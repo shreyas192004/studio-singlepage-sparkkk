@@ -40,6 +40,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { lovableSupabase } from "@/integrations/supabase/lovableClient";
 
 /* ---------- constants & small helpers ---------- */
 const PRODUCT_WORDS = ["T-Shirt", "Hoodie", "POLO", "Top"];
@@ -401,7 +402,10 @@ export default function AIGenerator() {
       const trimmedText = designText.trim();
       if (trimmedText.length > 0) body.text = trimmedText;
 
-      const { data, error } = await supabase.functions.invoke("generate-tshirt-design", { body });
+      const { data, error } = await lovableSupabase.functions.invoke(
+        "generate-tshirt-design",
+        { body }
+      );
 
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
