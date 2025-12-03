@@ -82,6 +82,7 @@ serve(async (req) => {
       validationResult.data;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    console.log("LOVABLE_API_KEY loaded:", LOVABLE_API_KEY ? `${LOVABLE_API_KEY.slice(0, 4)}********` : "NOT FOUND");
     if (!LOVABLE_API_KEY) {
       throw new Error("AI API key is not configured");
     }
