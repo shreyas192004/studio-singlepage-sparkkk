@@ -94,7 +94,6 @@ serve(async (req) => {
       aspectRatio,
       quality,
       creativity,
-      clothingType,
       imagePosition,
       text: text || "(none)",
     });
