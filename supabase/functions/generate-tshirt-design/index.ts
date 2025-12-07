@@ -43,7 +43,7 @@ const designRequestSchema = z.object({
   quality: z.enum(["standard", "high", "ultra"]).optional().default("high"),
   creativity: z.number().min(0).max(100).optional().default(70),
   text: z.string().trim().max(120).optional(),
-  clothingType: z.enum(["t-shirt", "polo", "hoodie", "tops"]).optional().default("t-shirt"),
+  clothingType: z.enum(["t-shirt", "polo", "hoodie", "tops", "sweatshirt"]).optional().default("t-shirt"),
   imagePosition: z.enum(["front", "back"]).optional().default("front"),
 });
 
