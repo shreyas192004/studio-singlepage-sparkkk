@@ -1,14 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
-/* -------------------- CORS -------------------- */
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-/* -------------------- INPUT SCHEMA -------------------- */
 const requestSchema = z.object({
   frontImageUrl: z.string().url(),
   backImageUrl: z.string().url().optional().nullable(),
@@ -16,12 +14,8 @@ const requestSchema = z.object({
   targetClothingType: z.enum(["t-shirt", "polo", "hoodie", "tops", "sweatshirt"]),
 });
 
-/* -------------------- SERVER -------------------- */
 serve(async (req) => {
-  // Handle CORS
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const body = await req.json();
@@ -35,46 +29,29 @@ serve(async (req) => {
     }
 
     const { frontImageUrl, backImageUrl, instruction, targetClothingType } = parsed.data;
+    const API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured in Supabase secrets");
-    }
+    if (!API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    /* -------------------- PROMPT LOGIC -------------------- */
-    const systemPrompt = `You are a high-end apparel mockup engine. 
-    Your task: Generate ONE high-resolution studio image showing the ${targetClothingType} from two angles.
-    
-    COMPOSITION:
-    - LEFT HALF: Front view of the garment.
-    - RIGHT HALF: Back view of the garment.
-    - BACKGROUND: Clean, neutral studio gray (#f0f0f0).
-    
-    STYLE RULES:
-    - Maintain the EXACT fabric texture, color, and lighting from the reference image.
-    - The design/print from the reference must be preserved perfectly.
-    - If a back image is provided, use it for the Right Half. 
-    - If NO back image is provided, the Right Half should show the back of the garment as plain/blank.`;
+    // Unified Prompt
+    const prompt = `Generate a PROFESSIONAL apparel mockup for a ${targetClothingType}.
+    STRICT COMPOSITION: Show TWO views in ONE single image. LEFT is the FRONT view, RIGHT is the BACK view.
+    STYLE: Use a clean, light gray studio background. Match the fabric texture and colors of the reference image exactly.
+    USER REQUEST: ${instruction}`;
 
-    const userPrompt = `Convert the attached design into a professional ${targetClothingType} mockup. 
-    Instruction: ${instruction}
-    Requirement: Show front and back side-by-side in one image.`;
-
-    /* -------------------- AI GATEWAY CALL -------------------- */
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        // Using 2.0-flash as it is highly reliable for image generation
-        model: "google/gemini-2.0-flash",
+        model: "google/gemini-2.0-flash", // FIXED MODEL NAME
         messages: [
           {
             role: "user",
             content: [
-              { type: "text", text: `${systemPrompt}\n\n${userPrompt}` },
+              { type: "text", text: prompt },
               { type: "image_url", image_url: { url: frontImageUrl } },
               ...(backImageUrl ? [{ type: "image_url", image_url: { url: backImageUrl } }] : []),
             ],
@@ -85,34 +62,28 @@ serve(async (req) => {
     });
 
     if (!response.ok) {
-      const errorData = await response.text();
-      console.error("AI Gateway Error:", errorData);
-      return new Response(JSON.stringify({ error: "AI service failed", details: errorData }), {
-        status: response.status,
-        headers: corsHeaders,
-      });
+      const errText = await response.text();
+      console.error("AI Gateway Response Error:", errText);
+      throw new Error(`AI Gateway failed: ${response.status}`);
     }
 
     const data = await response.json();
+    console.log("AI Response Data:", JSON.stringify(data));
 
-    /* -------------------- EXTRACT IMAGE -------------------- */
-    // Lovable Gateway returns the image in the message content for 2.0 models
-    const generatedImage =
-      data?.choices?.[0]?.message?.images?.[0]?.url ||
+    // Improved Extraction
+    const imageUrl =
       data?.choices?.[0]?.message?.content?.find((c: any) => c.type === "image_url")?.image_url?.url ||
-      data?.output?.[0]?.url;
+      data?.choices?.[0]?.message?.images?.[0]?.url ||
+      null;
 
-    if (!generatedImage) {
-      console.error("No image in response:", JSON.stringify(data));
-      throw new Error("AI completed the request but did not return an image.");
-    }
+    if (!imageUrl) throw new Error("No image generated by AI");
 
-    return new Response(JSON.stringify({ imageUrl: generatedImage }), {
+    return new Response(JSON.stringify({ imageUrl }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("Edge Function Error:", error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Internal Server Error" }), {
+    console.error("Function error:", error.message);
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: corsHeaders,
     });
