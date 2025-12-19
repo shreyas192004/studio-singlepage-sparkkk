@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.create-designer]
 verify_jwt = false
+
+[functions.convert-cloth-design]
+verify_jwt = false
