@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.convert-cloth-design]
 verify_jwt = false
+
+[functions.pattern-to-design]
+verify_jwt = false
