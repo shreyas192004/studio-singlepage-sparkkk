@@ -148,31 +148,32 @@ serve(async (req) => {
     });
 
     const enhancedPrompt = `
-SUBJECT: A high-quality photo of a ${color} ${currentApparel} on a plain background.
-TYPE: Product Photography involving ${color} fabric.
+STRICT OUTPUT: A photorealistic product shot of a ${color} ${currentApparel}.
+VIEW: Front view, flat lay or ghost mannequin style.
+BACKGROUND: Plain clean studio background (white or light gray).
 
-DESCRIPTION OF THE PRINT ON THE ${currentApparel}:
-${prompt}
+OBJECT: The main subject is a ${color} ${currentApparel} (clothing item).
+TEXTURE/PRINT: The following design is printed on the ${currentPlacement} of the ${currentApparel}:
+"${prompt}"
 
-DETAILS:
-- The item is a ${color} ${currentApparel}.
-- The design is printed on the ${currentPlacement}.
+IMPORTANT:
+- The image MUST show the ${currentApparel} clearly.
+- The "${prompt}" is ONLY the artwork on the fabric.
+- Do NOT generate a scene of "${prompt}". Generate a ${currentApparel} WITH "${prompt}" printed on it.
 
+STYLE DETAILS:
 - Style: ${style}
 - Color mood: ${colorScheme}
 - Quality: ${quality}
-- Creativity level: ${creativity}%
+- Creativity: ${creativity}%
 
-TEXT:
+TEXT INSTRUCTION:
 ${textInstruction}
 
-OUTPUT REQUIREMENTS:
-- Realistic wearable apparel mockup
-- Centered design, natural folds visible
-- Plain studio background
-- E-commerce ready product image
-- High resolution, sharp, professional
-- No watermark, no logos, no mannequin
+FINAL CHECK:
+- Visible Cloth: ${color} ${currentApparel}
+- Visible Print: "${prompt}"
+- No human models, no complex background.
 `;
 
     console.log("Enhanced prompt:", enhancedPrompt);
