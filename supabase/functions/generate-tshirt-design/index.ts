@@ -109,7 +109,33 @@ serve(async (req) => {
         : "Do NOT include any text, words, letters, logos, or watermarks in the design.";
 
     // Build the enhanced prompt - NO clothing type mentioned to get raw artwork only
-    const enhancedPrompt = `Create a high-quality, print-ready design artwork:
+    const enhancedPrompt = isApparelMockup
+      ? `
+Create ${apparelMap[clothingType]}.
+
+DESIGN DESCRIPTION:
+${prompt}
+
+PRINT DETAILS:
+- The design should be ${placementMap[imagePosition]}
+- Style: ${style}
+- Color mood: ${colorScheme}
+- Quality: ${quality}
+- Creativity level: ${creativity}%
+
+TEXT:
+${textInstruction}
+
+OUTPUT REQUIREMENTS:
+- Realistic wearable apparel mockup
+- Centered design, natural folds visible
+- Plain studio background
+- E-commerce ready product image
+- High resolution, sharp, professional
+- No watermark, no logos, no mannequin
+`
+      : `
+Create a high-quality, print-ready design artwork:
 
 DESIGN CONCEPT:
 ${prompt}
@@ -125,12 +151,10 @@ TEXT REQUIREMENT:
 ${textInstruction}
 
 OUTPUT REQUIREMENTS:
-- Just the artwork/graphic itself, NOT placed on any clothing or mockup
-- design should full as per aspect ratio ${aspectDesc}
-- High-resolution suitable for print (300 DPI)
-- Centered and balanced composition
-- No watermarks, signatures, or backgrounds
-- The design should be isolated and ready to overlay on any surface`;
+- Standalone artwork only
+- No clothing, no mockups
+- High-resolution print-ready
+`;
 
     console.log("Enhanced prompt:", enhancedPrompt);
 
