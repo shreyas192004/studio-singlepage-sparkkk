@@ -9,8 +9,11 @@ const corsHeaders = {
 
 // Input validation schema - matches all frontend options exactly (updated)
 const designRequestSchema = z.object({
-  prompt: z.string().trim().min(10).max(500),
-
+  prompt: z
+    .string()
+    .trim()
+    .min(10, "Prompt must be at least 10 characters")
+    .max(500, "Prompt must be under 500 characters"),
   style: z.enum([
     "modern",
     "vintage",
@@ -24,7 +27,6 @@ const designRequestSchema = z.object({
     "grunge",
     "realistic",
   ]),
-
   colorScheme: z.enum([
     "normal",
     "vibrant",
@@ -37,18 +39,14 @@ const designRequestSchema = z.object({
     "warm",
     "gradient",
   ]),
-
-  quality: z.enum(["standard", "high", "ultra"]).optional(),
-
-  creativity: z.number().min(0).max(100).optional(),
-
+  aspectRatio: z.enum(["square", "portrait", "landscape"]).optional().default("portrait"),
+  quality: z.enum(["standard", "high", "ultra"]).optional().default("high"),
+  creativity: z.number().min(0).max(100).optional().default(70),
   text: z.string().trim().max(120).optional(),
-
-  clothingType: z.enum(["t-shirt", "polo", "hoodie", "tops", "sweatshirt"]),
-
-  imagePosition: z.enum(["front", "back"]),
-
-  color: z.string().default("black"),
+  clothingType: z.enum(["t-shirt", "polo", "hoodie", "tops", "sweatshirt"]).optional().default("t-shirt"),
+  imagePosition: z.enum(["front", "back"]).optional().default("front"),
+  color: z.string().optional().default("black"),
+  size: z.string().optional().default("M"),
 });
 
 serve(async (req) => {
@@ -82,19 +80,8 @@ serve(async (req) => {
       });
     }
 
-    const {
-      prompt,
-      style,
-      colorScheme,
-      aspectRatio,
-      quality,
-      creativity,
-      clothingType,
-      imagePosition,
-      text,
-      color,
-      size,
-    } = validationResult.data;
+    const { prompt, style, colorScheme, quality, creativity, clothingType, imagePosition, text, color } =
+      validationResult.data;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     console.log("LOVABLE_API_KEY loaded:", LOVABLE_API_KEY ? `${LOVABLE_API_KEY.slice(0, 4)}********` : "NOT FOUND");
@@ -112,10 +99,6 @@ serve(async (req) => {
       imagePosition,
       text: text || "(none)",
     });
-
-    // Aspect ratio description
-    const aspectDesc =
-      aspectRatio === "square" ? "1:1 square" : aspectRatio === "portrait" ? "3:4 portrait" : "4:3 landscape";
 
     // Build text instruction conditionally
     const textInstruction =
