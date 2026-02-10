@@ -127,16 +127,12 @@ TEXT:
 ${textInstruction}
 
 OUTPUT REQUIREMENTS:
-- Generate ONLY the design/artwork with the selected cloth type
-- strictly want the cloth to be printed and the artwork on that cloth
-- Transparent or plain background
-- The design must be CENTERED
-- Leave safe margins on all sides (print-safe)
-- Optimized for placement on clothing (t-shirt, hoodie, polo)
-- High contrast and clean edges
-- No background scenes, no posters, no frames
-- No mockups, no folds, no mannequins
-- Print-ready, flat graphic
+- Realistic wearable apparel mockup
+- Centered design, natural folds visible
+- Plain studio background
+- E-commerce ready product image
+- High resolution, sharp, professional
+- No watermark, no logos, no mannequin
 `
       : `
 Create a high-quality, print-ready design artwork:
@@ -155,8 +151,7 @@ TEXT REQUIREMENT:
 ${textInstruction}
 
 OUTPUT REQUIREMENTS:
-- Standalone artwork only
-- No clothing, no mockups
+
 - High-resolution print-ready
 `;
 
