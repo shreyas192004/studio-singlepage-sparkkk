@@ -148,32 +148,39 @@ serve(async (req) => {
     });
 
     const enhancedPrompt = `
-STRICT OUTPUT: A photorealistic product shot of a ${color} ${currentApparel}.
-VIEW: Front view, flat lay or ghost mannequin style.
-BACKGROUND: Plain clean studio background (white or light gray).
+STRICT OUTPUT:
+A photorealistic studio product image of a ${color} ${currentApparel}.
 
-OBJECT: The main subject is a ${color} ${currentApparel} (clothing item).
-TEXTURE/PRINT: The following design is printed on the ${currentPlacement} of the ${currentApparel}:
-"${prompt}"
+VIEW:
+${imagePosition === "back" ? "Back view" : "Front view"}.
 
-IMPORTANT:
-- The image MUST show the ${currentApparel} clearly.
-- The "${prompt}" is ONLY the artwork on the fabric.
-- Do NOT generate a scene of "${prompt}". Generate a ${currentApparel} WITH "${prompt}" printed on it.
+BACKGROUND:
+Clean white or light gray studio background.
 
-STYLE DETAILS:
-- Style: ${style}
+PRODUCT RULES:
+- The image MUST clearly show a ${color} ${currentApparel}
+- The ${currentPlacement} of the ${currentApparel} must be visible
+- No human models
+- No complex background
+- No scene illustration
+
+DESIGN PRINT:
+"${prompt}" must be printed ONLY on the ${currentPlacement} of the ${currentApparel}
+The design should look realistic, aligned, and professionally printed.
+
+STYLE SETTINGS:
+- Art style: ${style}
 - Color mood: ${colorScheme}
 - Quality: ${quality}
 - Creativity: ${creativity}%
 
-TEXT INSTRUCTION:
+TEXT RULES:
 ${textInstruction}
 
 FINAL CHECK:
-- Visible Cloth: ${color} ${currentApparel}
-- Visible Print: "${prompt}"
-- No human models, no complex background.
+✔ Visible ${color} ${currentApparel}
+✔ Design printed on ${currentPlacement}
+✔ Studio product photo
 `;
 
     console.log("Enhanced prompt:", enhancedPrompt);
