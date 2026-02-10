@@ -9,24 +9,16 @@ const corsHeaders = {
 
 // Input validation schema - matches all frontend options exactly (updated)
 const designRequestSchema = z.object({
-  prompt: z
-    .string()
-    .trim()
-    .min(10, "Prompt must be at least 10 characters")
-    .max(500, "Prompt must be under 500 characters"),
-  style: z.enum([
-    "modern",
-    "vintage",
-    "minimalist",
-    "abstract",
-    "retro",
-    "graffiti",
-    "anime",
-    "geometric",
-    "organic",
-    "grunge",
-    "realistic",
-  ]),
+  prompt: z.string().trim().min(10).max(500),
+  style: z.string(),
+  colorScheme: z.string(),
+  quality: z.string().optional(),
+  creativity: z.number().optional(),
+  clothingType: z.string(),
+  imagePosition: z.enum(["front", "back"]),
+  color: z.string().optional(),
+  text: z.string().optional(),
+}).passthrough();
   colorScheme: z.enum([
     "normal",
     "vibrant",
