@@ -9,11 +9,8 @@ const corsHeaders = {
 
 // Input validation schema - matches all frontend options exactly (updated)
 const designRequestSchema = z.object({
-  prompt: z
-    .string()
-    .trim()
-    .min(10, "Prompt must be at least 10 characters")
-    .max(500, "Prompt must be under 500 characters"),
+  prompt: z.string().trim().min(10).max(500),
+
   style: z.enum([
     "modern",
     "vintage",
@@ -27,6 +24,7 @@ const designRequestSchema = z.object({
     "grunge",
     "realistic",
   ]),
+
   colorScheme: z.enum([
     "normal",
     "vibrant",
@@ -39,14 +37,18 @@ const designRequestSchema = z.object({
     "warm",
     "gradient",
   ]),
-  aspectRatio: z.enum(["square", "portrait", "landscape"]).optional().default("portrait"),
-  quality: z.enum(["standard", "high", "ultra"]).optional().default("high"),
-  creativity: z.number().min(0).max(100).optional().default(70),
+
+  quality: z.enum(["standard", "high", "ultra"]).optional(),
+
+  creativity: z.number().min(0).max(100).optional(),
+
   text: z.string().trim().max(120).optional(),
-  clothingType: z.enum(["t-shirt", "polo", "hoodie", "tops", "sweatshirt"]).optional().default("t-shirt"),
-  imagePosition: z.enum(["front", "back"]).optional().default("front"),
-  color: z.string().optional().default("black"),
-  size: z.string().optional().default("M"),
+
+  clothingType: z.enum(["t-shirt", "polo", "hoodie", "tops", "sweatshirt"]),
+
+  imagePosition: z.enum(["front", "back"]),
+
+  color: z.string().default("black"),
 });
 
 serve(async (req) => {
