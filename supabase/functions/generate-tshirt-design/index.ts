@@ -45,8 +45,6 @@ const designRequestSchema = z.object({
   text: z.string().trim().max(120).optional(),
   clothingType: z.enum(["t-shirt", "polo", "hoodie", "tops", "sweatshirt"]).optional().default("t-shirt"),
   imagePosition: z.enum(["front", "back"]).optional().default("front"),
-  color: z.string().optional().default("black"),
-  size: z.string().optional().default("M"),
 });
 
 serve(async (req) => {
@@ -80,7 +78,7 @@ serve(async (req) => {
       });
     }
 
-    const { prompt, style, colorScheme, aspectRatio, quality, creativity, clothingType, imagePosition, text, color, size } =
+    const { prompt, style, colorScheme, aspectRatio, quality, creativity, clothingType, imagePosition, text } =
       validationResult.data;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -111,47 +109,15 @@ serve(async (req) => {
         : "Do NOT include any text, words, letters, logos, or watermarks in the design.";
 
     // Build the enhanced prompt - NO clothing type mentioned to get raw artwork only
-    // User requested full apparel mockup generation
-    const isApparelMockup = true;
-
-    // Map clothing type to display name
-    const apparelMap: Record<string, string> = {
-      "t-shirt": "T-Shirt",
-      "polo": "Polo Shirt",
-      "hoodie": "Hoodie",
-      "sweatshirt": "Sweatshirt",
-      "tops": "Top",
-    };
-
-    // Map placement to display name
-    const placementMap: Record<string, string> = {
-      "front": "Front Center",
-      "back": "Back Center",
-    };
-
-    const currentApparel = apparelMap[clothingType] || clothingType;
-    const currentPlacement = placementMap[imagePosition] || imagePosition;
-
-    console.log("Mockup Target:", {
-      color,
-      size,
-      clothingType: currentApparel,
-      imagePosition: currentPlacement,
-      isApparelMockup
-    });
-
     const enhancedPrompt = isApparelMockup
       ? `
-SUBJECT: A high-quality photo of a ${color} ${currentApparel} on a plain background.
-TYPE: Product Photography involving ${color} fabric.
+Create ${apparelMap[clothingType]}.
 
-DESCRIPTION OF THE PRINT ON THE ${currentApparel}:
+DESIGN DESCRIPTION:
 ${prompt}
 
-DETAILS:
-- The item is a ${color} ${currentApparel}.
-- The design is printed on the ${currentPlacement}.
-
+PRINT DETAILS:
+- The design should be ${placementMap[imagePosition]}
 - Style: ${style}
 - Color mood: ${colorScheme}
 - Quality: ${quality}
@@ -161,12 +127,16 @@ TEXT:
 ${textInstruction}
 
 OUTPUT REQUIREMENTS:
-- Realistic wearable apparel mockup
-- Centered design, natural folds visible
-- Plain studio background
-- E-commerce ready product image
-- High resolution, sharp, professional
-- No watermark, no logos, no mannequin
+- Generate ONLY the design/artwork with the selected cloth type
+- strictly want the cloth to be printed and the artwork on that cloth
+- Transparent or plain background
+- The design must be CENTERED
+- Leave safe margins on all sides (print-safe)
+- Optimized for placement on clothing (t-shirt, hoodie, polo)
+- High contrast and clean edges
+- No background scenes, no posters, no frames
+- No mockups, no folds, no mannequins
+- Print-ready, flat graphic
 `
       : `
 Create a high-quality, print-ready design artwork:
@@ -188,8 +158,7 @@ OUTPUT REQUIREMENTS:
 - Standalone artwork only
 - No clothing, no mockups
 - High-resolution print-ready
-`; - High - resolution print - ready
-      `;
+`;
 
     console.log("Enhanced prompt:", enhancedPrompt);
 
@@ -197,7 +166,7 @@ OUTPUT REQUIREMENTS:
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${ LOVABLE_API_KEY } `,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
