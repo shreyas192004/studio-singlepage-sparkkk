@@ -45,6 +45,8 @@ const designRequestSchema = z.object({
   text: z.string().trim().max(120).optional(),
   clothingType: z.enum(["t-shirt", "polo", "hoodie", "tops", "sweatshirt"]).optional().default("t-shirt"),
   imagePosition: z.enum(["front", "back"]).optional().default("front"),
+  color: z.string().optional().default("black"),
+  size: z.string().optional().default("M"),
 });
 
 serve(async (req) => {
@@ -78,7 +80,7 @@ serve(async (req) => {
       });
     }
 
-    const { prompt, style, colorScheme, aspectRatio, quality, creativity, clothingType, imagePosition, text } =
+    const { prompt, style, colorScheme, aspectRatio, quality, creativity, clothingType, imagePosition, text, color, size } =
       validationResult.data;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -109,15 +111,37 @@ serve(async (req) => {
         : "Do NOT include any text, words, letters, logos, or watermarks in the design.";
 
     // Build the enhanced prompt - NO clothing type mentioned to get raw artwork only
+    // User requested full apparel mockup generation
+    const isApparelMockup = true;
+
+    // Map clothing type to display name
+    const apparelMap: Record<string, string> = {
+      "t-shirt": "T-Shirt",
+      "polo": "Polo Shirt",
+      "hoodie": "Hoodie",
+      "sweatshirt": "Sweatshirt",
+      "tops": "Top",
+    };
+
+    // Map placement to display name
+    const placementMap: Record<string, string> = {
+      "front": "Front Center",
+      "back": "Back Center",
+    };
+
+    const currentApparel = apparelMap[clothingType] || clothingType;
+    const currentPlacement = placementMap[imagePosition] || imagePosition;
+
     const enhancedPrompt = isApparelMockup
       ? `
-Create ${apparelMap[clothingType]}.
+Create a realistic studio product shot of a ${color} ${currentApparel}.
+The ${currentApparel} should be plain ${color} fabric.
 
-DESIGN DESCRIPTION:
+DESIGN DESCRIPTION (to be printed on the ${currentApparel}):
 ${prompt}
 
 PRINT DETAILS:
-- The design should be ${placementMap[imagePosition]}
+- The design should be printed on the ${currentPlacement}
 - Style: ${style}
 - Color mood: ${colorScheme}
 - Quality: ${quality}
@@ -154,7 +178,8 @@ OUTPUT REQUIREMENTS:
 - Standalone artwork only
 - No clothing, no mockups
 - High-resolution print-ready
-`;
+`; - High - resolution print - ready
+      `;
 
     console.log("Enhanced prompt:", enhancedPrompt);
 
@@ -162,7 +187,7 @@ OUTPUT REQUIREMENTS:
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${ LOVABLE_API_KEY } `,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
