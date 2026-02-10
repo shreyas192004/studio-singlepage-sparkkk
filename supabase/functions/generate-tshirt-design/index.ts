@@ -132,16 +132,26 @@ serve(async (req) => {
     const currentApparel = apparelMap[clothingType] || clothingType;
     const currentPlacement = placementMap[imagePosition] || imagePosition;
 
+    console.log("Mockup Target:", {
+      color,
+      size,
+      clothingType: currentApparel,
+      imagePosition: currentPlacement,
+      isApparelMockup
+    });
+
     const enhancedPrompt = isApparelMockup
       ? `
-Create a realistic studio product shot of a ${color} ${currentApparel}.
-The ${currentApparel} should be plain ${color} fabric.
+SUBJECT: A high-quality photo of a ${color} ${currentApparel} on a plain background.
+TYPE: Product Photography involving ${color} fabric.
 
-DESIGN DESCRIPTION (to be printed on the ${currentApparel}):
+DESCRIPTION OF THE PRINT ON THE ${currentApparel}:
 ${prompt}
 
-PRINT DETAILS:
-- The design should be printed on the ${currentPlacement}
+DETAILS:
+- The item is a ${color} ${currentApparel}.
+- The design is printed on the ${currentPlacement}.
+
 - Style: ${style}
 - Color mood: ${colorScheme}
 - Quality: ${quality}
