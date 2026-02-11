@@ -134,72 +134,49 @@ serve(async (req) => {
 
     const enhancedPrompt = `
 ROLE:
-You are a professional apparel graphic designer creating a PRINT-READY T-SHIRT DESIGN.
+You are a professional apparel graphic designer.
 
-ABSOLUTE RULES (NON-NEGOTIABLE):
-- Generate ONLY a T-SHIRT PRINT GRAPHIC
-- This is NOT a poster, NOT a book cover, NOT a scene illustration
-- DO NOT create full environments, landscapes, skies, or cinematic backgrounds
-- DO NOT create depth-heavy scenes or storytelling compositions
-- DO NOT show clothing, mockups, models, or studio photography
-- NO borders, NO frames, NO UI elements
-- NO watermarks, NO logos, NO brand names
+TASK TYPE:
+This is a GRAPHIC EXTRACTION task, not an illustration task.
 
-COMPOSITION RULES (VERY IMPORTANT):
-- Single, centered design
-- Subject must be ISOLATED or grouped tightly
-- Design must float on a transparent or plain background
-- No background storytelling
-- No horizon lines
+FAIL CONDITION:
+If the result looks like a poster, wallpaper, illustration scene, or book cover, it is WRONG.
+
+OUTPUT GOAL:
+Produce a SINGLE ISOLATED GRAPHIC ELEMENT suitable for T-shirt printing.
+
+ABSOLUTE RULES:
+- One main subject only
+- No environment, no background, no scenery
+- No storytelling
+- No depth-heavy composition
 - No cinematic lighting
-- No wide-angle composition
+- No clothing or mockups
 
-BACKGROUND:
-- Transparent background preferred
-- If not possible: flat, solid, neutral background
-- Background must be removable easily
-- Background must NOT be part of the artwork
+CANVAS:
+- Square 1:1
+- Subject occupies 60–70% of canvas
+- Empty padding around edges
 
-DESIGN STYLE:
-- Clean, bold, wearable
-- High contrast
-- Clear silhouette
-- Looks good when printed on fabric
-- Similar to premium streetwear or print-on-demand designs
+DESIGN INSTRUCTION:
+Interpret the concept below and extract ONLY the CORE SUBJECT as a clean graphic.
 
-DESIGN IDEA:
-Create a T-shirt graphic based on this concept:
+CONCEPT:
 "${prompt}"
 
-STYLE SETTINGS:
-- Art style: ${style}
-- Color mood: ${colorScheme}
-- Quality: ${quality}
-- Creativity: ${creativity}%
+STYLE:
+- ${style}
+- ${colorScheme}
+- ${quality}
+- Creativity ${creativity}%
 
-TEXT RULES:
-${
-  text && text.length > 0
-    ? `Include this text as part of the graphic:
-"${text}"
-- Text must be bold and readable
-- Text must be integrated into the design
-- Avoid small or thin typography`
-    : `Do NOT include any text or lettering`
-}
+TEXT:
+${text && text.length > 0 ? `Include text as part of the graphic: "${text}"` : `Do NOT include text`}
 
 PRINT SAFETY:
-- Avoid tiny details
-- Avoid excessive gradients
-- Avoid background noise
-- Design must be printable on a T-shirt
-
-FINAL VALIDATION:
-✔ Isolated graphic
-✔ No full scene
-✔ No poster composition
-✔ Apparel-print ready
-✔ Centered and wearable
+- Bold shapes
+- Clear silhouette
+- Wearable design
 `;
 
     console.log("Enhanced prompt:", enhancedPrompt);
