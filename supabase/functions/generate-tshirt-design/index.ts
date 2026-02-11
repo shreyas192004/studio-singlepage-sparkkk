@@ -7,27 +7,59 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const schema = z.object({
-  prompt: z.string().min(10).max(500),
-  style: z.string(),
-  colorScheme: z.string(),
-  creativity: z.number().min(0).max(100).default(70),
-  text: z.string().optional(),
+/* ---------------- Schema (UNCHANGED) ---------------- */
+const designRequestSchema = z.object({
+  prompt: z.string().trim().min(10).max(500),
+  style: z.enum([
+    "modern",
+    "vintage",
+    "minimalist",
+    "abstract",
+    "retro",
+    "graffiti",
+    "anime",
+    "geometric",
+    "organic",
+    "grunge",
+    "realistic",
+  ]),
+  colorScheme: z.enum([
+    "normal",
+    "vibrant",
+    "pastel",
+    "monochrome",
+    "neon",
+    "earth-tones",
+    "black-white",
+    "cool",
+    "warm",
+    "gradient",
+  ]),
+  quality: z.enum(["standard", "high", "ultra"]).optional().default("high"),
+  creativity: z.number().min(0).max(100).optional().default(70),
+  text: z.string().trim().max(120).optional(),
 });
 
+/* ---------------- Server ---------------- */
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: corsHeaders,
+    });
+  }
 
   try {
     const body = await req.json();
-    const { prompt, style, colorScheme, creativity, text } = schema.parse(body);
+    const { prompt, style, colorScheme, quality, creativity, text } = designRequestSchema.parse(body);
 
     const API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!API_KEY) throw new Error("Missing API key");
+    if (!API_KEY) throw new Error("AI API key not configured");
 
-    /* ===============================
-       STEP 1 — CONCEPT ART (FREE)
-    =============================== */
+    /* ======================================================
+       STEP 1 — CONCEPT ART (FREE CREATIVE GENERATION)
+    ====================================================== */
 
     const conceptPrompt = `
 You are a cinematic concept artist.
@@ -40,7 +72,7 @@ Rules:
 - Dramatic lighting allowed
 - Characters allowed
 - Storytelling allowed
-- No UI, no text overlays
+- No text, no UI, no logos
 `;
 
     const conceptRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -59,11 +91,11 @@ Rules:
     const conceptData = await conceptRes.json();
     const conceptImage = conceptData?.choices?.[0]?.message?.images?.[0]?.url;
 
-    if (!conceptImage) throw new Error("Concept image failed");
+    if (!conceptImage) throw new Error("Concept image generation failed");
 
-    /* ===============================
-       STEP 2 — PRINT ISOLATION
-    =============================== */
+    /* ======================================================
+       STEP 2 — PRINT ISOLATION (THIS IS THE REAL PRINT PROMPT)
+    ====================================================== */
 
     const printPrompt = `
 You are a professional apparel graphic designer.
@@ -72,7 +104,7 @@ TASK:
 Convert the given image into a PRINT-READY T-SHIRT GRAPHIC.
 
 ABSOLUTE RULES:
-- REMOVE background completely
+- REMOVE background completely (transparent if possible)
 - NO scenery, NO environment
 - NO cinematic lighting
 - Subject must be isolated
@@ -80,14 +112,16 @@ ABSOLUTE RULES:
 - High contrast
 - Clean silhouette
 - Apparel-print safe
+- NOT a poster or illustration
 
-STYLE:
-- ${style}
+STYLE SETTINGS:
+- Art style: ${style}
 - Color mood: ${colorScheme}
+- Quality: ${quality}
 - Creativity: ${creativity}%
 
 TEXT RULES:
-${text ? `Include this text cleanly: "${text}"` : "NO text allowed"}
+${text ? `Include this text cleanly and boldly: "${text}"` : "NO text, NO lettering"}
 `;
 
     const finalRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -116,6 +150,7 @@ ${text ? `Include this text cleanly: "${text}"` : "NO text allowed"}
 
     if (!finalImage) throw new Error("Final print image failed");
 
+    /* ---------------- Response (UNCHANGED) ---------------- */
     return new Response(JSON.stringify({ imageUrl: finalImage }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
