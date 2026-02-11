@@ -133,39 +133,61 @@ serve(async (req) => {
     });
 
     const enhancedPrompt = `
-STRICT OUTPUT:
-A photorealistic studio product image of a ${color} ${currentApparel}.
+ROLE:
+You are a professional graphic designer creating a PRINT DESIGN for apparel.
 
-VIEW:
-${imagePosition === "back" ? "Back view" : "Front view"}.
+STRICT OUTPUT REQUIREMENTS:
+- Generate ONLY the DESIGN ARTWORK
+- DO NOT show any clothing, apparel, models, mannequins, or mockups
+- DO NOT show studio backgrounds or product photography
+- DO NOT include frames, borders, posters, or UI elements
+- NO watermarks, NO logos, NO brand names
 
-BACKGROUND:
-Clean white or light gray studio background.
+CANVAS & COMPOSITION:
+- Centered composition
+- Balanced layout suitable for T-shirt printing
+- Main subject clearly visible and not cropped
+- High contrast and clear edges
+- Avoid tiny details near the edges
+- Design must look good when printed on fabric
 
-PRODUCT RULES:
-- The image MUST clearly show a ${color} ${currentApparel}
-- The ${currentPlacement} of the ${currentApparel} must be visible
-- No human models
-- No complex background
-- No scene illustration
+BACKGROUND RULES:
+- Background should be TRANSPARENT if possible
+- If transparency is not supported, use a clean, simple background
+- Background must NOT distract from the design
+- No scenery that fills the entire canvas unless part of the design concept
 
-DESIGN PRINT:
-"${prompt}" must be printed ONLY on the ${currentPlacement} of the ${currentApparel}
-The design should look realistic, aligned, and professionally printed.
+DESIGN CONCEPT:
+"${prompt}"
 
 STYLE SETTINGS:
-- Art style: ${style}
+- Visual style: ${style}
 - Color mood: ${colorScheme}
-- Quality: ${quality}
+- Quality level: ${quality}
 - Creativity: ${creativity}%
 
-TEXT RULES:
-${textInstruction}
+TEXT HANDLING:
+${
+  text && text.length > 0
+    ? `Include this text as part of the design:
+"${text}"
+- Text must be stylish, readable, and well integrated
+- Text should feel intentional, not pasted`
+    : `Do NOT include any text, letters, words, numbers, or symbols`
+}
 
-FINAL CHECK:
-✔ Visible ${color} ${currentApparel}
-✔ Design printed on ${currentPlacement}
-✔ Studio product photo
+PRINT OPTIMIZATION:
+- Design should be bold and readable from a distance
+- Avoid thin lines that may not print well
+- Avoid excessive gradients unless stylistically required
+- Artwork must feel premium and wearable
+
+FINAL CHECKLIST (must pass all):
+✔ Artwork only
+✔ No apparel visible
+✔ No mockup
+✔ Print-ready
+✔ Centered composition
 `;
 
     console.log("Enhanced prompt:", enhancedPrompt);
