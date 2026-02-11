@@ -7,64 +7,57 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Input validation schema - matches all frontend options exactly (updated)
 const schema = z.object({
   prompt: z.string().min(10).max(500),
   style: z.string(),
   colorScheme: z.string(),
   creativity: z.number().min(0).max(100).default(70),
+
+  // product controls
+  apparelType: z.enum(["t-shirt", "hoodie", "sweatshirt", "polo", "tops"]),
+  apparelColor: z.string(),
+  designPlacement: z.enum(["front", "back"]),
+
   text: z.string().optional(),
 });
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
   try {
     const body = await req.json();
-    const { prompt, style, colorScheme, creativity, text } = schema.parse(body);
+    const { prompt, style, colorScheme, creativity, apparelType, apparelColor, designPlacement, text } =
+      schema.parse(body);
 
     const API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!API_KEY) {
-      throw new Error("Missing API key");
-    }
+    if (!API_KEY) throw new Error("Missing API key");
 
-    /* ==========================================
-       STEP 1 — CONCEPT ART (FREE)
-       Uses `enhancedPrompt` as requested
-    ========================================== */
+    /* ============================
+       STEP 1 — DESIGN GENERATION
+    ============================ */
 
-    const enhancedPrompt = `
-You are a cinematic concept artist.
+    const designPrompt = `
+You are a professional illustration artist.
 
-Create a detailed, expressive illustration based on:
+Create a high-quality DESIGN ARTWORK based on:
 "${prompt}"
 
-Style: ${style}
-Color Scheme: ${colorScheme}
-Creativity: ${creativity}%
+STYLE:
+- Art style: ${style}
+- Color mood: ${colorScheme}
+- Creativity: ${creativity}%
 
-Rules:
-- Full environment allowed
-- Dramatic lighting allowed
-- Characters allowed
-- Storytelling allowed
-- No UI, no text overlays
+RULES:
+- Full illustration allowed
+- No text unless specified
+- No mockups
+- No apparel
+- No UI
 `;
 
-    console.log("STEP 1: Generating Concept Art...");
-    console.log("Prompt:", enhancedPrompt);
-
-    const step1Response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const step1Res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${API_KEY}`,
@@ -72,66 +65,55 @@ Rules:
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-image",
-        messages: [{ role: "user", content: enhancedPrompt }],
+        messages: [{ role: "user", content: designPrompt }],
         modalities: ["image"],
       }),
     });
 
-    if (!step1Response.ok) {
-      const errorText = await step1Response.text();
-      console.error("Step 1 AI Error:", step1Response.status, errorText);
-      throw new Error(`Step 1 Generation Failed: ${errorText}`);
+    const step1Data = await step1Res.json();
+    const designImageUrl = step1Data?.choices?.[0]?.message?.images?.[0]?.url;
+
+    if (!designImageUrl) {
+      throw new Error("Step 1 failed to generate design");
     }
 
-    const step1Data = await step1Response.json();
+    /* ============================
+       STEP 2 — PRODUCT PREPARATION
+    ============================ */
 
-    // Extract: const conceptImageUrl
-    const conceptImageUrl =
-      step1Data?.choices?.[0]?.message?.images?.[0]?.url ||
-      step1Data?.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
-      step1Data?.choices?.[0]?.message?.image_url;
-
-    if (!conceptImageUrl) {
-      console.error("No image URL in Step 1 response", step1Data);
-      throw new Error("Step 1 failed to generate an image.");
-    }
-
-    console.log("STEP 1 SUCCESS. Concept URL:", conceptImageUrl);
-
-    /* ==========================================
-       STEP 2 — PRINT ISOLATION (IMAGE → IMAGE)
-       Uses `printPrompt` + `conceptImageUrl`
-    ========================================== */
-
-    const printPrompt = `
-You are a professional apparel graphic designer.
+    const productPrompt = `
+You are a PRINT DESIGN PREPARATION ENGINE.
 
 TASK:
-Convert the given image into a PRINT-READY T-SHIRT GRAPHIC.
+Prepare the provided artwork for printing on apparel.
 
-ABSOLUTE RULES:
-- REMOVE background completely
-- NO scenery, NO environment
-- NO cinematic lighting
-- Subject must be isolated
-- Centered composition
-- High contrast
-- Clean silhouette
-- Apparel-print safe
+PRODUCT SETTINGS:
+- Apparel type: ${apparelType}
+- Apparel color: ${apparelColor}
+- Design placement: ${designPlacement}
 
-STYLE:
-- ${style}
-- Color mood: ${colorScheme}
-- Creativity: ${creativity}%
+RULES (MANDATORY):
+- DO NOT create a mockup
+- DO NOT show clothing
+- DO NOT add backgrounds
+- Keep artwork print-ready
+- Center and scale artwork correctly for placement
+- Ensure good contrast for "${apparelColor}" fabric
+- Clean edges, no noise
 
-TEXT RULES:
-${text ? `Include this text cleanly: "${text}"` : "NO text allowed"}
+PLACEMENT LOGIC:
+- Front: center chest placement
+- Back: upper back placement
+
+TEXT:
+${text ? `Include text cleanly: "${text}"` : "No text"}
+
+OUTPUT:
+- Single print-ready design image
+- Transparent or plain background
 `;
 
-    console.log("STEP 2: Converting to Print...");
-    console.log("Prompt:", printPrompt);
-
-    const step2Response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const step2Res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${API_KEY}`,
@@ -143,8 +125,8 @@ ${text ? `Include this text cleanly: "${text}"` : "NO text allowed"}
           {
             role: "user",
             content: [
-              { type: "input_text", text: printPrompt },
-              { type: "input_image", image_url: conceptImageUrl },
+              { type: "input_text", text: productPrompt },
+              { type: "input_image", image_url: designImageUrl },
             ],
           },
         ],
@@ -152,41 +134,17 @@ ${text ? `Include this text cleanly: "${text}"` : "NO text allowed"}
       }),
     });
 
-    if (!step2Response.ok) {
-      const errorText = await step2Response.text();
-      console.error("Step 2 AI Error:", step2Response.status, errorText);
-      throw new Error(`Step 2 Generation Failed: ${errorText}`);
-    }
-
-    const step2Data = await step2Response.json();
-
-    // Extract: const finalImageUrl
-    const finalImageUrl =
-      step2Data?.choices?.[0]?.message?.images?.[0]?.url ||
-      step2Data?.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
-      step2Data?.choices?.[0]?.message?.image_url;
+    const step2Data = await step2Res.json();
+    const finalImageUrl = step2Data?.choices?.[0]?.message?.images?.[0]?.url;
 
     if (!finalImageUrl) {
-      console.error("No image URL in Step 2 response", step2Data);
-      throw new Error("Step 2 failed to generate an image.");
+      throw new Error("Step 2 failed to prepare design");
     }
 
-    console.log("STEP 2 SUCCESS. Final URL:", finalImageUrl);
-
-    // ==========================================
-    // FINAL RESPONSE
-    // Return ONLY finalImageUrl
-    // ==========================================
     return new Response(JSON.stringify({ imageUrl: finalImageUrl }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err: any) {
-    console.error("Function error:", err);
-    return new Response(
-      JSON.stringify({
-        error: err instanceof Error ? err.message : "Unknown error",
-      }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
   }
 });
