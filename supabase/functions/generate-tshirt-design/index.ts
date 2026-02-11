@@ -82,35 +82,62 @@ RULES:
     ============================ */
 
     const productPrompt = `
-You are a PRINT DESIGN PREPARATION ENGINE.
+SYSTEM OVERRIDE — CRITICAL TASK
 
-TASK:
-Prepare the provided artwork for printing on apparel.
+You are NOT designing.
+You are NOT illustrating.
+You are PERFORMING IMAGE EXTRACTION.
 
-PRODUCT SETTINGS:
+OBJECTIVE:
+Extract ONE SINGLE PRINT GRAPHIC from the image.
+
+SUBJECT RULES (MANDATORY):
+- Choose ONE primary subject only (main character OR main creature)
+- KEEP that subject
+- DELETE EVERYTHING ELSE
+
+YOU MUST DELETE COMPLETELY:
+- All backgrounds
+- All skies
+- All castles
+- All buildings
+- All landscapes
+- All frames or borders
+- All decorative elements
+- All secondary characters
+- All props not physically part of the subject
+- All lighting environments
+- All shadows outside the subject
+
+OUTPUT REQUIREMENTS (NON-NEGOTIABLE):
+- ONE isolated subject only
+- Transparent background (alpha)
+- Subject fully visible
+- Subject centered
+- Clean edges
+- No glow outside subject
+- No floor
+- No horizon
+- No environment
+
+THIS IS A FAILURE IF:
+- More than one subject exists
+- Any background pixel exists
+- It looks like a poster
+- It looks like a framed image
+- It looks like concept art
+
+PRINT CONTEXT:
 - Apparel type: ${apparelType}
 - Apparel color: ${apparelColor}
-- Design placement: ${designPlacement}
-
-RULES (MANDATORY):
-- DO NOT create a mockup
-- DO NOT show clothing
-- DO NOT add backgrounds
-- Keep artwork print-ready
-- Center and scale artwork correctly for placement
-- Ensure good contrast for "${apparelColor}" fabric
-- Clean edges, no noise
-
-PLACEMENT LOGIC:
-- Front: center chest placement
-- Back: upper back placement
+- Placement: ${designPlacement}
+- High contrast for fabric printing
 
 TEXT:
-${text ? `Include text cleanly: "${text}"` : "No text"}
+${text ? `Include text ONLY if it is part of the subject: "${text}"` : "NO TEXT"}
 
-OUTPUT:
-- Single print-ready design image
-- Transparent or plain background
+FINAL OUTPUT:
+Return ONLY the isolated print graphic on transparent background.
 `;
 
     const step2Res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
