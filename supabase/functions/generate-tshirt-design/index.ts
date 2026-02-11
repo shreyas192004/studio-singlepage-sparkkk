@@ -7,54 +7,27 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const designRequestSchema = z.object({
-  prompt: z.string().trim().min(10).max(500),
-  style: z.enum([
-    "modern",
-    "vintage",
-    "minimalist",
-    "abstract",
-    "retro",
-    "graffiti",
-    "anime",
-    "geometric",
-    "organic",
-    "grunge",
-    "realistic",
-  ]),
-  colorScheme: z.enum([
-    "normal",
-    "vibrant",
-    "pastel",
-    "monochrome",
-    "neon",
-    "earth-tones",
-    "black-white",
-    "cool",
-    "warm",
-    "gradient",
-  ]),
-  quality: z.enum(["standard", "high", "ultra"]).optional().default("high"),
-  creativity: z.number().min(0).max(100).optional().default(70),
-  text: z.string().trim().max(120).optional(),
+const schema = z.object({
+  prompt: z.string().min(10).max(500),
+  style: z.string(),
+  colorScheme: z.string(),
+  creativity: z.number().min(0).max(100).default(70),
+  text: z.string().optional(),
 });
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const body = designRequestSchema.parse(await req.json());
-
-    const { prompt, style, colorScheme, quality, creativity, text } = body;
+    const body = await req.json();
+    const { prompt, style, colorScheme, creativity, text } = schema.parse(body);
 
     const API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!API_KEY) throw new Error("Missing AI API key");
+    if (!API_KEY) throw new Error("Missing API key");
 
-    /* ==============================
-       STEP 1: CONCEPT ART
-    ============================== */
+    /* ===============================
+       STEP 1 — CONCEPT ART (FREE)
+    =============================== */
 
     const conceptPrompt = `
 You are a cinematic concept artist.
@@ -64,10 +37,10 @@ Create a detailed, expressive illustration based on:
 
 Rules:
 - Full environment allowed
+- Dramatic lighting allowed
+- Characters allowed
 - Storytelling allowed
-- Characters and scenery allowed
-- This is CONCEPT ART ONLY
-- Ignore printing or apparel rules
+- No UI, no text overlays
 `;
 
     const conceptRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -83,46 +56,41 @@ Rules:
       }),
     });
 
-    if (!conceptRes.ok) throw new Error("Concept generation failed");
-
     const conceptData = await conceptRes.json();
+    const conceptImage = conceptData?.choices?.[0]?.message?.images?.[0]?.url;
 
-    const conceptImageUrl =
-      conceptData?.choices?.[0]?.message?.images?.[0]?.image_url?.url || conceptData?.images?.[0]?.url;
+    if (!conceptImage) throw new Error("Concept image failed");
 
-    if (!conceptImageUrl) throw new Error("No concept image generated");
-
-    /* ==============================
-       STEP 2: PRINT CONVERTER
-    ============================== */
+    /* ===============================
+       STEP 2 — PRINT ISOLATION
+    =============================== */
 
     const printPrompt = `
-You are a professional apparel print designer.
+You are a professional apparel graphic designer.
 
 TASK:
-Convert the provided image into a PRINT-READY T-SHIRT GRAPHIC.
+Convert the given image into a PRINT-READY T-SHIRT GRAPHIC.
 
 ABSOLUTE RULES:
-- REMOVE all background completely
-- REMOVE scenery, buildings, props
-- KEEP only the main subject
-- Center the subject
+- REMOVE background completely
+- NO scenery, NO environment
+- NO cinematic lighting
+- Subject must be isolated
+- Centered composition
+- High contrast
 - Clean silhouette
-- Flat or transparent background
-- No environment
-- No cinematic lighting
-- No poster composition
+- Apparel-print safe
 
-TEXT:
-${text ? `Add this text cleanly and boldly: "${text}"` : "Do NOT add any text"}
+STYLE:
+- ${style}
+- Color mood: ${colorScheme}
+- Creativity: ${creativity}%
 
-FINAL CHECK:
-✔ Isolated subject
-✔ Wearable
-✔ Print-ready
+TEXT RULES:
+${text ? `Include this text cleanly: "${text}"` : "NO text allowed"}
 `;
 
-    const printRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const finalRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${API_KEY}`,
@@ -133,31 +101,25 @@ FINAL CHECK:
         messages: [
           {
             role: "user",
-            content: printPrompt,
-            images: [{ url: conceptImageUrl }],
+            content: [
+              { type: "input_text", text: printPrompt },
+              { type: "input_image", image_url: conceptImage },
+            ],
           },
         ],
         modalities: ["image"],
       }),
     });
 
-    if (!printRes.ok) throw new Error("Print conversion failed");
+    const finalData = await finalRes.json();
+    const finalImage = finalData?.choices?.[0]?.message?.images?.[0]?.url;
 
-    const printData = await printRes.json();
+    if (!finalImage) throw new Error("Final print image failed");
 
-    const finalImageUrl = printData?.choices?.[0]?.message?.images?.[0]?.image_url?.url || printData?.images?.[0]?.url;
-
-    if (!finalImageUrl) throw new Error("No final image generated");
-
-    return new Response(JSON.stringify({ imageUrl: finalImageUrl }), {
+    return new Response(JSON.stringify({ imageUrl: finalImage }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (err) {
-    return new Response(
-      JSON.stringify({
-        error: err instanceof Error ? err.message : "Unknown error",
-      }),
-      { status: 500, headers: corsHeaders },
-    );
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
   }
 });
