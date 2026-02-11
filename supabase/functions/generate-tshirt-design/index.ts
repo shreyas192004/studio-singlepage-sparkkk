@@ -7,253 +7,175 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Input validation schema - matches all frontend options exactly (updated)
-const designRequestSchema = z.object({
-  prompt: z
-    .string()
-    .trim()
-    .min(10, "Prompt must be at least 10 characters")
-    .max(500, "Prompt must be under 500 characters"),
-  style: z.enum([
-    "modern",
-    "vintage",
-    "minimalist",
-    "abstract",
-    "retro",
-    "graffiti",
-    "anime",
-    "geometric",
-    "organic",
-    "grunge",
-    "realistic",
-  ]),
-  colorScheme: z.enum([
-    "normal",
-    "vibrant",
-    "pastel",
-    "monochrome",
-    "neon",
-    "earth-tones",
-    "black-white",
-    "cool",
-    "warm",
-    "gradient",
-  ]),
-  aspectRatio: z.enum(["square", "portrait", "landscape"]).optional().default("portrait"),
-  quality: z.enum(["standard", "high", "ultra"]).optional().default("high"),
-  creativity: z.number().min(0).max(100).optional().default(70),
-  text: z.string().trim().max(120).optional(),
-  clothingType: z.enum(["t-shirt", "polo", "hoodie", "tops", "sweatshirt"]).optional().default("t-shirt"),
-  imagePosition: z.enum(["front", "back"]).optional().default("front"),
-  color: z.string().optional().default("black"),
-  size: z.string().optional().default("M"),
+const schema = z.object({
+  prompt: z.string().min(10).max(500),
+  style: z.string().default("realistic"),
+  colorScheme: z.string().default("normal"),
+  quality: z.string().default("high"),
+  creativity: z.number().min(0).max(100).default(70),
+  text: z.string().optional(),
 });
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
   try {
-    const body = await req.json();
-    console.log("Request body received:", body);
+    const body = schema.parse(await req.json());
 
-    const validationResult = designRequestSchema.safeParse(body);
+    const { prompt, style, colorScheme, quality, creativity, text } = body;
 
-    if (!validationResult.success) {
-      const errors = validationResult.error.errors.map((e) => ({
-        path: e.path.join("."),
-        message: e.message,
-      }));
-      console.error("Validation errors:", errors);
-      return new Response(JSON.stringify({ error: "Invalid request", details: errors }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!API_KEY) throw new Error("Missing AI API key");
 
-    const { prompt, style, colorScheme, quality, creativity, clothingType, imagePosition, text, color } =
-      validationResult.data;
+    /* ======================================================
+       STEP 1 — CONCEPT ART (CREATIVE, CINEMATIC)
+    ====================================================== */
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    console.log("LOVABLE_API_KEY loaded:", LOVABLE_API_KEY ? `${LOVABLE_API_KEY.slice(0, 4)}********` : "NOT FOUND");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("AI API key is not configured");
-    }
+    const conceptPrompt = `
+You are a professional concept artist.
 
-    console.log("Generating design with:", {
-      prompt,
-      style,
-      colorScheme,
-      aspectRatio,
-      quality,
-      creativity,
-      imagePosition,
-      text: text || "(none)",
-    });
-
-    // Build text instruction conditionally
-    const textInstruction =
-      text && text.length > 0
-        ? `IMPORTANT: Include this text prominently in the design: "${text}". Make the text stylish, readable, and well-integrated with the artwork.`
-        : "Do NOT include any text, words, letters, logos, or watermarks in the design.";
-
-    // Build the enhanced prompt - NO clothing type mentioned to get raw artwork only
-    // Map clothing type to display name
-    const apparelMap: Record<string, string> = {
-      "t-shirt": "T-Shirt",
-      polo: "Polo Shirt",
-      hoodie: "Hoodie",
-      sweatshirt: "Sweatshirt",
-      tops: "Top",
-    };
-
-    // Map placement to display name
-    const placementMap: Record<string, string> = {
-      front: "Front Center",
-      back: "Back Center",
-    };
-
-    const currentApparel = apparelMap[clothingType] || clothingType;
-    const currentPlacement = placementMap[imagePosition] || imagePosition;
-
-    console.log("Mockup Target:", {
-      color,
-      size,
-      clothingType: currentApparel,
-      imagePosition: currentPlacement,
-    });
-
-    const enhancedPrompt = `
-ROLE:
-You are a professional apparel graphic designer.
-
-TASK TYPE:
-This is a GRAPHIC EXTRACTION task, not an illustration task.
-
-FAIL CONDITION:
-If the result looks like a poster, wallpaper, illustration scene, or book cover, it is WRONG.
-
-OUTPUT GOAL:
-Produce a SINGLE ISOLATED GRAPHIC ELEMENT suitable for T-shirt printing.
-
-ABSOLUTE RULES:
-- One main subject only
-- No environment, no background, no scenery
-- No storytelling
-- No depth-heavy composition
-- No cinematic lighting
-- No clothing or mockups
-
-CANVAS:
-- Square 1:1
-- Subject occupies 60–70% of canvas
-- Empty padding around edges
-
-DESIGN INSTRUCTION:
-Interpret the concept below and extract ONLY the CORE SUBJECT as a clean graphic.
-
-CONCEPT:
+Create a highly detailed, cinematic concept illustration based on this idea:
 "${prompt}"
 
 STYLE:
-- ${style}
-- ${colorScheme}
-- ${quality}
-- Creativity ${creativity}%
+- Art style: ${style}
+- Color mood: ${colorScheme}
+- Quality: ${quality}
+- Creativity: ${creativity}%
 
-TEXT:
-${text && text.length > 0 ? `Include text as part of the graphic: "${text}"` : `Do NOT include text`}
-
-PRINT SAFETY:
-- Bold shapes
-- Clear silhouette
-- Wearable design
+RULES:
+- Full environment and background allowed
+- Storytelling and atmosphere encouraged
+- This is CONCEPT ART ONLY
+- Do NOT worry about printing
 `;
 
-    console.log("Enhanced prompt:", enhancedPrompt);
-
-    // Call AI gateway
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const conceptRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY} `,
+        Authorization: `Bearer ${API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-image",
-        messages: [{ role: "user", content: enhancedPrompt }],
-        modalities: ["image", "text"],
+        messages: [{ role: "user", content: conceptPrompt }],
+        modalities: ["image"],
       }),
     });
 
-    if (!response.ok) {
-      const status = response.status;
-      const errorText = await response.text();
-      console.error("AI gateway error:", status, errorText);
-
-      if (status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required. Please add funds to your account." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      return new Response(JSON.stringify({ error: "AI service error", details: errorText }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!conceptRes.ok) {
+      throw new Error("Concept generation failed");
     }
 
-    const data = await response.json();
-    console.log("AI response:", JSON.stringify(data, null, 2));
+    const conceptData = await conceptRes.json();
 
-    // Extract image URL from various possible response formats
-    const imageUrl =
-      data?.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
-      data?.choices?.[0]?.message?.images?.[0]?.url ||
-      data?.choices?.[0]?.message?.image_url ||
-      data?.output?.[0]?.url ||
-      data?.data?.[0]?.url ||
-      data?.images?.[0]?.url ||
-      data?.image_url ||
-      null;
+    const conceptImageUrl =
+      conceptData?.choices?.[0]?.message?.images?.[0]?.image_url?.url || conceptData?.images?.[0]?.url;
 
-    if (!imageUrl) {
-      console.error("No image URL in response:", data);
-      throw new Error("No image generated");
+    if (!conceptImageUrl) {
+      throw new Error("No concept image generated");
     }
 
-    console.log("Generated image URL:", imageUrl);
+    /* ======================================================
+       STEP 2 — PRINT DESIGN CONVERTER (STRICT)
+    ====================================================== */
+
+    const printPrompt = `
+You are a professional apparel graphic designer.
+
+TASK:
+Convert the provided image into a PRINT-READY T-SHIRT DESIGN.
+
+STRICT RULES (NON-NEGOTIABLE):
+- Extract ONLY the main subject
+- REMOVE all background, scenery, characters, environment
+- Clean edges and sharp silhouette
+- Center the subject
+- Plain or transparent background
+- No poster layout
+- No cinematic lighting
+- No depth or perspective tricks
+- No frames or borders
+- No mockups or clothing shown
+
+TEXT RULES:
+${
+  text
+    ? `Include this text clearly and boldly: "${text}"
+       - Integrated naturally
+       - Readable from distance`
+    : "DO NOT include any text or letters"
+}
+
+CANVAS:
+- Square (1:1)
+- Subject occupies 60–70% of canvas
+- Suitable for real T-shirt printing
+
+FINAL CHECK:
+✔ Isolated
+✔ Wearable
+✔ Print-safe
+✔ Looks like streetwear art
+`;
+
+    const printRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-image",
+        messages: [
+          {
+            role: "user",
+            content: printPrompt,
+            images: [{ url: conceptImageUrl }],
+          },
+        ],
+        modalities: ["image"],
+      }),
+    });
+
+    if (!printRes.ok) {
+      throw new Error("Print conversion failed");
+    }
+
+    const printData = await printRes.json();
+
+    const finalImageUrl = printData?.choices?.[0]?.message?.images?.[0]?.image_url?.url || printData?.images?.[0]?.url;
+
+    if (!finalImageUrl) {
+      throw new Error("No final image generated");
+    }
 
     return new Response(
       JSON.stringify({
-        imageUrl,
-        includedText: text || null,
+        imageUrl: finalImageUrl,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      },
     );
-  } catch (error) {
-    console.error("Function error:", error);
+  } catch (err) {
+    console.error(err);
     return new Response(
       JSON.stringify({
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: err instanceof Error ? err.message : "Unknown error",
       }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      {
+        status: 500,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      },
     );
   }
 });
