@@ -134,60 +134,72 @@ serve(async (req) => {
 
     const enhancedPrompt = `
 ROLE:
-You are a professional graphic designer creating a PRINT DESIGN for apparel.
+You are a professional apparel graphic designer creating a PRINT-READY T-SHIRT DESIGN.
 
-STRICT OUTPUT REQUIREMENTS:
-- Generate ONLY the DESIGN ARTWORK
-- DO NOT show any clothing, apparel, models, mannequins, or mockups
-- DO NOT show studio backgrounds or product photography
-- DO NOT include frames, borders, posters, or UI elements
+ABSOLUTE RULES (NON-NEGOTIABLE):
+- Generate ONLY a T-SHIRT PRINT GRAPHIC
+- This is NOT a poster, NOT a book cover, NOT a scene illustration
+- DO NOT create full environments, landscapes, skies, or cinematic backgrounds
+- DO NOT create depth-heavy scenes or storytelling compositions
+- DO NOT show clothing, mockups, models, or studio photography
+- NO borders, NO frames, NO UI elements
 - NO watermarks, NO logos, NO brand names
 
-CANVAS & COMPOSITION:
-- Centered composition
-- Balanced layout suitable for T-shirt printing
-- Main subject clearly visible and not cropped
-- High contrast and clear edges
-- Avoid tiny details near the edges
-- Design must look good when printed on fabric
+COMPOSITION RULES (VERY IMPORTANT):
+- Single, centered design
+- Subject must be ISOLATED or grouped tightly
+- Design must float on a transparent or plain background
+- No background storytelling
+- No horizon lines
+- No cinematic lighting
+- No wide-angle composition
 
-BACKGROUND RULES:
-- Background should be TRANSPARENT if possible
-- If transparency is not supported, use a clean, simple background
-- Background must NOT distract from the design
-- No scenery that fills the entire canvas unless part of the design concept
+BACKGROUND:
+- Transparent background preferred
+- If not possible: flat, solid, neutral background
+- Background must be removable easily
+- Background must NOT be part of the artwork
 
-DESIGN CONCEPT:
+DESIGN STYLE:
+- Clean, bold, wearable
+- High contrast
+- Clear silhouette
+- Looks good when printed on fabric
+- Similar to premium streetwear or print-on-demand designs
+
+DESIGN IDEA:
+Create a T-shirt graphic based on this concept:
 "${prompt}"
 
 STYLE SETTINGS:
-- Visual style: ${style}
+- Art style: ${style}
 - Color mood: ${colorScheme}
-- Quality level: ${quality}
+- Quality: ${quality}
 - Creativity: ${creativity}%
 
-TEXT HANDLING:
+TEXT RULES:
 ${
   text && text.length > 0
-    ? `Include this text as part of the design:
+    ? `Include this text as part of the graphic:
 "${text}"
-- Text must be stylish, readable, and well integrated
-- Text should feel intentional, not pasted`
-    : `Do NOT include any text, letters, words, numbers, or symbols`
+- Text must be bold and readable
+- Text must be integrated into the design
+- Avoid small or thin typography`
+    : `Do NOT include any text or lettering`
 }
 
-PRINT OPTIMIZATION:
-- Design should be bold and readable from a distance
-- Avoid thin lines that may not print well
-- Avoid excessive gradients unless stylistically required
-- Artwork must feel premium and wearable
+PRINT SAFETY:
+- Avoid tiny details
+- Avoid excessive gradients
+- Avoid background noise
+- Design must be printable on a T-shirt
 
-FINAL CHECKLIST (must pass all):
-✔ Artwork only
-✔ No apparel visible
-✔ No mockup
-✔ Print-ready
-✔ Centered composition
+FINAL VALIDATION:
+✔ Isolated graphic
+✔ No full scene
+✔ No poster composition
+✔ Apparel-print ready
+✔ Centered and wearable
 `;
 
     console.log("Enhanced prompt:", enhancedPrompt);
