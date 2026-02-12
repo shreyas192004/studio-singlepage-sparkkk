@@ -8,17 +8,20 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Input schema matching frontend exactly (but we ignore product fields for generation)
+// Input schema matching frontend exactly
 const schema = z.object({
   prompt: z.string().min(10).max(500),
   style: z.string(),
   colorScheme: z.string(),
   creativity: z.number().min(0).max(100).default(70),
 
-  // Product fields (kept for schema compatibility but ignored for AI generation)
+  // Product fields
   apparelType: z.string().optional(),
   apparelColor: z.string().optional(),
   designPlacement: z.string().optional(),
+  clothingType: z.string().optional(),
+  imagePosition: z.string().optional(),
+  color: z.string().optional(),
 
   text: z.string().optional(),
 });
@@ -28,18 +31,30 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { prompt, style, colorScheme, creativity, text } = schema.parse(body);
+    const { prompt, style, colorScheme, creativity, text, clothingType, imagePosition, apparelType, designPlacement } =
+      schema.parse(body);
 
+    // Validate required environment variables
     const API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!API_KEY) throw new Error("Missing API key");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!API_KEY) {
+      return new Response(JSON.stringify({ error: "Server configuration error: Missing LOVABLE_API_KEY" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return new Response(JSON.stringify({ error: "Server configuration error: Missing Supabase credentials" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     /* ============================================================
        SINGLE-STEP DESIGN GENERATION
-       Strictly follows "Master Prompt" rules:
-       - Output ONLY the design artwork
-       - NO apparel/mockups/scenes
-       - Transparent background
-       - One clear subject
     ============================================================ */
 
     const designPrompt = `
@@ -101,7 +116,10 @@ Return only the raw design image.
     if (!response.ok) {
       const errorText = await response.text();
       console.error("AI Generation Error:", response.status, errorText);
-      throw new Error(`AI Generation Failed: ${errorText}`);
+      return new Response(JSON.stringify({ error: `AI Generation Failed: ${response.status}` }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const data = await response.json();
@@ -112,15 +130,21 @@ Return only the raw design image.
 
     if (!imageUrl) {
       console.error("No image URL in response", data);
-      throw new Error("Failed to generate design image");
+      return new Response(JSON.stringify({ error: "Failed to generate design image" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     console.log("Design Generated Successfully:", imageUrl);
 
-    // Initialize Supabase client for storage and database
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Initialize Supabase client with service role for storage/DB operations
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
 
     // Get user ID from authorization header
     const authHeader = req.headers.get("authorization");
@@ -141,21 +165,22 @@ Return only the raw design image.
       }
     }
 
-    // Download the generated image from Lovable
-    let supabaseImageUrl: string | null = null;
+    // Download and upload image to user's Supabase Storage
+    let supabaseImageUrl: string = imageUrl;
     try {
       console.log("Downloading image from Lovable...");
       const imageResponse = await fetch(imageUrl);
       if (!imageResponse.ok) {
-        throw new Error("Failed to download generated image");
+        throw new Error(`Failed to download image: ${imageResponse.status}`);
       }
       const imageBlob = await imageResponse.blob();
 
-      // Upload to user's Supabase Storage
-      const filename = `ai_${userId ?? "anon"}_${Date.now()}.png`;
-      const storagePath = `${filename}`;
+      // Use service role to bypass RLS - storage path doesn't need user folder structure
+      const filename = `${userId || "anon"}_${Date.now()}.png`;
+      const storagePath = filename; // Direct path in bucket root
 
       console.log("Uploading to Supabase Storage:", storagePath);
+
       const { error: uploadError } = await supabase.storage.from("ai-designs").upload(storagePath, imageBlob, {
         cacheControl: "3600",
         upsert: false,
@@ -176,26 +201,22 @@ Return only the raw design image.
       }
     } catch (storageErr) {
       console.error("Failed to upload to storage:", storageErr);
-      // Continue anyway with the original Lovable URL
-      supabaseImageUrl = imageUrl;
+      // Continue with Lovable URL - non-critical failure
     }
 
-    // Get additional parameters from request body
-    const { clothingType, imagePosition, color, apparelType, apparelColor, designPlacement } = body;
-
-    // Save to ai_generations table
-    let generationId = null;
+    // Save to ai_generations table (only if user is authenticated)
+    let generationId: string | null = null;
     if (userId) {
       try {
         const { data: generationData, error: dbError } = await supabase
           .from("ai_generations")
           .insert({
             user_id: userId,
-            session_id: globalThis.crypto.randomUUID(), // Generate a session ID
+            session_id: globalThis.crypto.randomUUID(),
             prompt,
             style,
             color_scheme: colorScheme,
-            image_url: supabaseImageUrl || imageUrl,
+            image_url: supabaseImageUrl,
             clothing_type: clothingType || apparelType || "t-shirt",
             image_position: imagePosition || designPlacement || "front",
             included_text: text || null,
@@ -206,27 +227,39 @@ Return only the raw design image.
 
         if (dbError) {
           console.error("Database insertion error:", dbError);
+          // Continue without DB record - non-critical failure
         } else {
           generationId = generationData?.id;
           console.log("Saved to database with ID:", generationId);
         }
       } catch (dbErr) {
         console.error("Failed to save generation:", dbErr);
+        // Continue without DB record - non-critical failure
       }
+    } else {
+      console.log("Skipping DB insert - no authenticated user");
     }
 
     return new Response(
       JSON.stringify({
-        imageUrl: supabaseImageUrl || imageUrl,
+        imageUrl: supabaseImageUrl,
         generationId,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err: any) {
     console.error("Function Error:", err);
-    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }), {
-      status: 500,
-      headers: corsHeaders,
-    });
+
+    // Return detailed error for debugging
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    const errorDetails = err instanceof z.ZodError ? err.errors : undefined;
+
+    return new Response(
+      JSON.stringify({
+        error: errorMessage,
+        details: errorDetails,
+      }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   }
 });
