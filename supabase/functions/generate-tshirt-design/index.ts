@@ -9,257 +9,214 @@ const corsHeaders = {
 };
 
 // Input schema matching frontend exactly
-const schema = z.object({
-  prompt: z.string().min(10).max(500),
-  style: z.string(),
-  colorScheme: z.string(),
-  creativity: z.number().min(0).max(100).default(70),
-
-  // Product fields
-  apparelType: z.string().optional(),
-  apparelColor: z.string().optional(),
-  designPlacement: z.string().optional(),
-  clothingType: z.string().optional(),
-  imagePosition: z.string().optional(),
-  color: z.string().optional(),
-
-  text: z.string().optional(),
+const designRequestSchema = z.object({
+  prompt: z
+    .string()
+    .trim()
+    .min(10, "Prompt must be at least 10 characters")
+    .max(500, "Prompt must be under 500 characters"),
+  style: z.enum([
+    "modern",
+    "vintage",
+    "minimalist",
+    "abstract",
+    "retro",
+    "graffiti",
+    "anime",
+    "geometric",
+    "organic",
+    "grunge",
+    "realistic",
+  ]),
+  colorScheme: z.enum([
+    "normal",
+    "vibrant",
+    "pastel",
+    "monochrome",
+    "neon",
+    "earth-tones",
+    "black-white",
+    "cool",
+    "warm",
+    "gradient",
+  ]),
+  aspectRatio: z.enum(["square", "portrait", "landscape"]).optional().default("portrait"),
+  quality: z.enum(["standard", "high", "ultra"]).optional().default("high"),
+  creativity: z.number().min(0).max(100).optional().default(70),
+  text: z.string().trim().max(120).optional(),
+  clothingType: z.enum(["t-shirt", "polo", "hoodie", "tops", "sweatshirt"]).optional().default("t-shirt"),
+  imagePosition: z.enum(["front", "back"]).optional().default("front"),
 });
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
 
   try {
+    const authHeader = req.headers.get("Authorization");
     const body = await req.json();
-    const { prompt, style, colorScheme, creativity, text, clothingType, imagePosition, apparelType, designPlacement } =
-      schema.parse(body);
+    console.log("Request body received:", body);
 
-    // Validate required environment variables
-    const API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-    if (!API_KEY) {
-      return new Response(JSON.stringify({ error: "Server configuration error: Missing LOVABLE_API_KEY" }), {
-        status: 500,
+    const validationResult = designRequestSchema.safeParse(body);
+    if (!validationResult.success) {
+      return new Response(JSON.stringify({ error: "Invalid request", details: validationResult.error.errors }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    if (!supabaseUrl || !supabaseServiceKey) {
-      return new Response(JSON.stringify({ error: "Server configuration error: Missing Supabase credentials" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const { prompt, style, colorScheme, aspectRatio, quality, creativity, clothingType, imagePosition, text } =
+      validationResult.data;
+
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const MAIN_PROJECT_URL = Deno.env.get("MAIN_PROJECT_URL");
+    const MAIN_PROJECT_SERVICE_KEY = Deno.env.get("MAIN_PROJECT_SERVICE_KEY");
+
+    if (!LOVABLE_API_KEY || !MAIN_PROJECT_URL || !MAIN_PROJECT_SERVICE_KEY) {
+      console.error("Missing configuration:", {
+        LOVABLE_API_KEY: !!LOVABLE_API_KEY,
+        MAIN_PROJECT_URL: !!MAIN_PROJECT_URL,
+        MAIN_PROJECT_SERVICE_KEY: !!MAIN_PROJECT_SERVICE_KEY,
       });
+      throw new Error(
+        "Edge Function secrets not set. Please set MAIN_PROJECT_URL and MAIN_PROJECT_SERVICE_KEY in Lovable.",
+      );
     }
 
-    /* ============================================================
-       SINGLE-STEP DESIGN GENERATION
-    ============================================================ */
+    // --- 1. GENERATE IMAGE ---
+    const aspectDesc =
+      aspectRatio === "square" ? "1:1 square" : aspectRatio === "portrait" ? "3:4 portrait" : "4:3 landscape";
+    const textInstruction =
+      text && text.trim().length > 0
+        ? `IMPORTANT: Include this text prominently in the design: "${text}". Make the text stylish, readable, and well-integrated.`
+        : "Do NOT include any text, words, letters, logos, or watermarks.";
 
-    const designPrompt = `
-You are a professional apparel print designer.
+    const enhancedPrompt = `
+      Create a high-quality, print-ready design artwork (isolated):
+      CONCEPT: ${prompt}
+      SPECIFICATIONS:
+      - Style: ${style}
+      - Color scheme: ${colorScheme}
+      - Resolution: ${quality} (300 DPI)
+      - Creativity: ${creativity}%
+      - Layout: ${aspectDesc}
+      REQUIREMENT:
+      ${textInstruction}
+      - Just the artwork/graphic itself, NOT on clothing or mockup.
+      - Isolated design ready for print.
+    `.trim();
 
-TASK:
-Create a PRINT-READY DESIGN ARTWORK.
-
-ABSOLUTE RULES:
-- Generate ONLY the design artwork
-- NO apparel
-- NO mockups
-- NO mannequins
-- NO scenes
-- NO environments
-- NO backgrounds
-- Transparent background only
-- One clear subject
-- Centered
-- High contrast
-- Clean silhouette
-
-THIS IS FOR:
-T-shirt / hoodie printing
-
-DESIGN DETAILS:
-- Prompt: "${prompt}"
-- Style: ${style}
-- Color Scheme: ${colorScheme}
-- Creativity Level: ${creativity}%
-
-TEXT:
-${text ? `Include text ONLY if explicitly provided: "${text}"` : "Do NOT include any text."}
-
-FAIL IF:
-- Any background exists
-- Multiple subjects exist
-- It looks like a poster or scene
-
-OUTPUT FORMAT:
-Return only the raw design image.
-`;
-
-    console.log("Generating Single-Step Design...", { prompt, style });
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    console.log("Calling Lovable AI API...");
+    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${API_KEY}`,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-image",
-        messages: [{ role: "user", content: designPrompt }],
-        modalities: ["image"],
+        messages: [{ role: "user", content: enhancedPrompt }],
+        modalities: ["image", "text"],
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("AI Generation Error:", response.status, errorText);
-      return new Response(JSON.stringify({ error: `AI Generation Failed: ${response.status}` }), {
-        status: 502,
+    if (!aiResponse.ok) {
+      const errorText = await aiResponse.text();
+      console.error("AI API Error:", aiResponse.status, errorText);
+      return new Response(JSON.stringify({ error: "AI Generation failed", details: errorText }), {
+        status: aiResponse.status === 429 ? 429 : 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const data = await response.json();
+    const aiData = await aiResponse.json();
     const imageUrl =
-      data?.choices?.[0]?.message?.images?.[0]?.url ||
-      data?.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
-      data?.choices?.[0]?.message?.image_url;
+      aiData?.choices?.[0]?.message?.images?.[0]?.url || aiData?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
 
-    if (!imageUrl) {
-      console.error("No image URL in response", data);
-      return new Response(JSON.stringify({ error: "Failed to generate design image" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!imageUrl) throw new Error("No image URL returned from AI");
 
-    console.log("Design Generated Successfully:", imageUrl);
+    console.log("Image generated successfully:", imageUrl);
 
-    // Initialize Supabase client with service role for storage/DB operations
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
-
-    // Get user ID from authorization header
-    const authHeader = req.headers.get("authorization");
-    let userId: string | null = null;
+    // --- 2. PERSISTENCE ---
+    let finalImageUrl = imageUrl;
+    let userId = "anon";
 
     if (authHeader) {
       try {
         const token = authHeader.replace("Bearer ", "");
-        const {
-          data: { user },
-          error: authError,
-        } = await supabase.auth.getUser(token);
-        if (!authError && user) {
-          userId = user.id;
+        const userRes = await fetch(`${MAIN_PROJECT_URL}/auth/v1/user`, {
+          headers: { Authorization: `Bearer ${token}`, apikey: MAIN_PROJECT_SERVICE_KEY },
+        });
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          userId = userData.id;
         }
-      } catch (authErr) {
-        console.error("Auth error:", authErr);
+      } catch (e) {
+        console.warn("Could not verify user token, continuing as anon:", (e as any).message);
       }
     }
 
-    // Download and upload image to user's Supabase Storage
-    let supabaseImageUrl: string = imageUrl;
     try {
-      console.log("Downloading image from Lovable...");
-      const imageResponse = await fetch(imageUrl);
-      if (!imageResponse.ok) {
-        throw new Error(`Failed to download image: ${imageResponse.status}`);
-      }
-      const imageBlob = await imageResponse.blob();
+      console.log(`Starting persistence for user: ${userId}`);
 
-      // Use service role to bypass RLS - storage path doesn't need user folder structure
-      const filename = `${userId || "anon"}_${Date.now()}.png`;
-      const storagePath = filename; // Direct path in bucket root
+      const imgFetch = await fetch(imageUrl);
+      const imgBlob = await imgFetch.blob();
 
-      console.log("Uploading to Supabase Storage:", storagePath);
+      const filename = `${userId}_${Date.now()}.png`;
+      const storagePath = `${userId}/${filename}`;
 
-      const { error: uploadError } = await supabase.storage.from("ai-designs").upload(storagePath, imageBlob, {
-        cacheControl: "3600",
-        upsert: false,
-        contentType: "image/png",
+      // Upload to Main Project Storage
+      const uploadRes = await fetch(`${MAIN_PROJECT_URL}/storage/v1/object/ai-designs/${storagePath}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${MAIN_PROJECT_SERVICE_KEY}`,
+          "Content-Type": imgBlob.type,
+          "x-upsert": "true",
+        },
+        body: imgBlob,
       });
 
-      if (uploadError) {
-        console.error("Storage upload error:", uploadError);
-        throw uploadError;
-      }
+      if (uploadRes.ok) {
+        finalImageUrl = `${MAIN_PROJECT_URL}/storage/v1/object/public/ai-designs/${storagePath}`;
+        console.log("Saved to storage:", finalImageUrl);
 
-      // Get public URL
-      const { data: urlData } = supabase.storage.from("ai-designs").getPublicUrl(storagePath);
-
-      if (urlData?.publicUrl) {
-        supabaseImageUrl = urlData.publicUrl;
-        console.log("Image uploaded to Supabase:", supabaseImageUrl);
-      }
-    } catch (storageErr) {
-      console.error("Failed to upload to storage:", storageErr);
-      // Continue with Lovable URL - non-critical failure
-    }
-
-    // Save to ai_generations table (only if user is authenticated)
-    let generationId: string | null = null;
-    if (userId) {
-      try {
-        const { data: generationData, error: dbError } = await supabase
-          .from("ai_generations")
-          .insert({
-            user_id: userId,
-            session_id: globalThis.crypto.randomUUID(),
-            prompt,
-            style,
+        // Save to Database
+        await fetch(`${MAIN_PROJECT_URL}/rest/v1/ai_generations`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${MAIN_PROJECT_SERVICE_KEY}`,
+            apikey: MAIN_PROJECT_SERVICE_KEY,
+            "Content-Type": "application/json",
+            Prefer: "return=minimal",
+          },
+          body: JSON.stringify({
+            user_id: userId === "anon" ? null : userId,
+            image_url: finalImageUrl,
+            prompt: prompt,
+            style: style,
             color_scheme: colorScheme,
-            image_url: supabaseImageUrl,
-            clothing_type: clothingType || apparelType || "t-shirt",
-            image_position: imagePosition || designPlacement || "front",
+            clothing_type: clothingType,
+            image_position: imagePosition,
+            session_id: crypto.randomUUID(),
             included_text: text || null,
-            created_at: new Date().toISOString(),
-          })
-          .select("id")
-          .single();
-
-        if (dbError) {
-          console.error("Database insertion error:", dbError);
-          // Continue without DB record - non-critical failure
-        } else {
-          generationId = generationData?.id;
-          console.log("Saved to database with ID:", generationId);
-        }
-      } catch (dbErr) {
-        console.error("Failed to save generation:", dbErr);
-        // Continue without DB record - non-critical failure
+          }),
+        });
+      } else {
+        console.error("Storage upload failed:", await uploadRes.text());
       }
-    } else {
-      console.log("Skipping DB insert - no authenticated user");
+    } catch (saveError: any) {
+      console.error("Persistence failed (non-blocking):", saveError.message);
     }
 
-    return new Response(
-      JSON.stringify({
-        imageUrl: supabaseImageUrl,
-        generationId,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  } catch (err: any) {
-    console.error("Function Error:", err);
-
-    // Return detailed error for debugging
-    const errorMessage = err instanceof Error ? err.message : "Unknown error";
-    const errorDetails = err instanceof z.ZodError ? err.errors : undefined;
-
-    return new Response(
-      JSON.stringify({
-        error: errorMessage,
-        details: errorDetails,
-      }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ imageUrl: finalImageUrl, includedText: text }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("Unexpected error:", error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
