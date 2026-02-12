@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -116,9 +117,111 @@ Return only the raw design image.
 
     console.log("Design Generated Successfully:", imageUrl);
 
-    return new Response(JSON.stringify({ imageUrl }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // Initialize Supabase client for storage and database
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Get user ID from authorization header
+    const authHeader = req.headers.get("authorization");
+    let userId: string | null = null;
+
+    if (authHeader) {
+      try {
+        const token = authHeader.replace("Bearer ", "");
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser(token);
+        if (!authError && user) {
+          userId = user.id;
+        }
+      } catch (authErr) {
+        console.error("Auth error:", authErr);
+      }
+    }
+
+    // Download the generated image from Lovable
+    let supabaseImageUrl: string | null = null;
+    try {
+      console.log("Downloading image from Lovable...");
+      const imageResponse = await fetch(imageUrl);
+      if (!imageResponse.ok) {
+        throw new Error("Failed to download generated image");
+      }
+      const imageBlob = await imageResponse.blob();
+
+      // Upload to user's Supabase Storage
+      const filename = `ai_${userId ?? "anon"}_${Date.now()}.png`;
+      const storagePath = `${filename}`;
+
+      console.log("Uploading to Supabase Storage:", storagePath);
+      const { error: uploadError } = await supabase.storage.from("ai-designs").upload(storagePath, imageBlob, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: "image/png",
+      });
+
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError);
+        throw uploadError;
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage.from("ai-designs").getPublicUrl(storagePath);
+
+      if (urlData?.publicUrl) {
+        supabaseImageUrl = urlData.publicUrl;
+        console.log("Image uploaded to Supabase:", supabaseImageUrl);
+      }
+    } catch (storageErr) {
+      console.error("Failed to upload to storage:", storageErr);
+      // Continue anyway with the original Lovable URL
+      supabaseImageUrl = imageUrl;
+    }
+
+    // Get additional parameters from request body
+    const { clothingType, imagePosition, color, apparelType, apparelColor, designPlacement } = body;
+
+    // Save to ai_generations table
+    let generationId = null;
+    if (userId) {
+      try {
+        const { data: generationData, error: dbError } = await supabase
+          .from("ai_generations")
+          .insert({
+            user_id: userId,
+            session_id: crypto.randomUUID(), // Generate a session ID
+            prompt,
+            style,
+            color_scheme: colorScheme,
+            image_url: supabaseImageUrl || imageUrl,
+            clothing_type: clothingType || apparelType || "t-shirt",
+            image_position: imagePosition || designPlacement || "front",
+            included_text: text || null,
+            created_at: new Date().toISOString(),
+          })
+          .select("id")
+          .single();
+
+        if (dbError) {
+          console.error("Database insertion error:", dbError);
+        } else {
+          generationId = generationData?.id;
+          console.log("Saved to database with ID:", generationId);
+        }
+      } catch (dbErr) {
+        console.error("Failed to save generation:", dbErr);
+      }
+    }
+
+    return new Response(
+      JSON.stringify({
+        imageUrl: supabaseImageUrl || imageUrl,
+        generationId,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   } catch (err: any) {
     console.error("Function Error:", err);
     return new Response(JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }), {
