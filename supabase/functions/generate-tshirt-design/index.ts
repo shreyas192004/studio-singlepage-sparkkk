@@ -182,7 +182,7 @@ serve(async (req) => {
         console.log("Saved to storage:", finalImageUrl);
 
         // Save to Database
-        await fetch(`${MAIN_PROJECT_URL}/rest/v1/ai_generations`, {
+        const dbRes = await fetch(`${MAIN_PROJECT_URL}/rest/v1/ai_generations`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${MAIN_PROJECT_SERVICE_KEY}`,
@@ -202,8 +202,14 @@ serve(async (req) => {
             included_text: text || null,
           }),
         });
+
+        if (dbRes.ok) {
+          console.log("✅ Data successfully saved to Main Project Database");
+        } else {
+          console.error("❌ Database insert failed:", await dbRes.text());
+        }
       } else {
-        console.error("Storage upload failed:", await uploadRes.text());
+        console.error("❌ Storage upload failed:", await uploadRes.text());
       }
     } catch (saveError: any) {
       console.error("Persistence failed (non-blocking):", saveError.message);
