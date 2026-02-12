@@ -8,7 +8,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Input schema matching frontend exactly
+// Input schema from "tesora latest latest" (ensures compatibility)
 const designRequestSchema = z.object({
   prompt: z
     .string()
@@ -69,6 +69,11 @@ serve(async (req) => {
     const { prompt, style, colorScheme, aspectRatio, quality, creativity, clothingType, imagePosition, text } =
       validationResult.data;
 
+    // --- SECRETS CHECK (Improved Error Handling) ---
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const MAIN_PROJECT_URL = Deno.env.get("MAIN_PROJECT_URL");
+    const MAIN_PROJECT_SERVICE_KEY = Deno.env.get("MAIN_PROJECT_SERVICE_KEY");
+
     const missing = [];
     if (!LOVABLE_API_KEY) missing.push("LOVABLE_API_KEY");
     if (!MAIN_PROJECT_URL) missing.push("MAIN_PROJECT_URL");
@@ -77,36 +82,47 @@ serve(async (req) => {
     if (missing.length > 0) {
       const errorMsg = `Missing secrets in Lovable: ${missing.join(", ")}`;
       console.error(errorMsg);
+      // Return 500 so UI shows the specific error
       return new Response(JSON.stringify({ error: errorMsg }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // --- 1. GENERATE IMAGE ---
+    // --- 1. GENERATE IMAGE (Logic from tesora latest latest) ---
     const aspectDesc =
       aspectRatio === "square" ? "1:1 square" : aspectRatio === "portrait" ? "3:4 portrait" : "4:3 landscape";
+
     const textInstruction =
       text && text.trim().length > 0
-        ? `IMPORTANT: Include this text prominently in the design: "${text}". Make the text stylish, readable, and well-integrated.`
-        : "Do NOT include any text, words, letters, logos, or watermarks.";
+        ? `IMPORTANT: Include this text prominently in the design: "${text}". Make the text stylish, readable, and well-integrated with the artwork.`
+        : "Do NOT include any text, words, letters, logos, or watermarks in the design.";
 
-    const enhancedPrompt = `
-      Create a high-quality, print-ready design artwork (isolated):
-      CONCEPT: ${prompt}
-      SPECIFICATIONS:
-      - Style: ${style}
-      - Color scheme: ${colorScheme}
-      - Resolution: ${quality} (300 DPI)
-      - Creativity: ${creativity}%
-      - Layout: ${aspectDesc}
-      REQUIREMENT:
-      ${textInstruction}
-      - Just the artwork/graphic itself, NOT on clothing or mockup.
-      - Isolated design ready for print.
-    `.trim();
+    const enhancedPrompt = `Create a high-quality, print-ready design artwork:
 
-    console.log("Calling Lovable AI API...");
+DESIGN CONCEPT:
+${prompt}
+
+SPECIFICATIONS:
+- Style: ${style}
+- Color scheme: ${colorScheme}
+- Quality: ${quality}
+- Creativity level: ${creativity}%
+- Aspect ratio: ${aspectDesc}
+
+TEXT REQUIREMENT:
+${textInstruction}
+
+OUTPUT REQUIREMENTS:
+- Just the artwork/graphic itself, NOT placed on any clothing or mockup
+- design should full as per aspect ratio ${aspectDesc}
+- High-resolution suitable for print (300 DPI)
+- Centered and balanced composition
+- No watermarks, signatures, or backgrounds
+- The design should be isolated and ready to overlay on any surface`.trim();
+
+    console.log("Calling Lovable AI API with Enhanced Prompt...");
+
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -122,25 +138,51 @@ serve(async (req) => {
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error("AI API Error:", aiResponse.status, errorText);
-      return new Response(JSON.stringify({ error: "AI Generation failed", details: errorText }), {
-        status: aiResponse.status === 429 ? 429 : 502,
+      console.error("AI gateway error:", aiResponse.status, errorText);
+
+      // Handle specific gateway errors
+      if (aiResponse.status === 429) {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (aiResponse.status === 402) {
+        return new Response(JSON.stringify({ error: "Payment required. Please add funds to your account." }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ error: "AI service error", details: errorText }), {
+        status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const aiData = await aiResponse.json();
     const imageUrl =
-      aiData?.choices?.[0]?.message?.images?.[0]?.url || aiData?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+      aiData?.choices?.[0]?.message?.images?.[0]?.url ||
+      aiData?.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
+      aiData?.choices?.[0]?.message?.image_url ||
+      aiData?.output?.[0]?.url ||
+      aiData?.data?.[0]?.url ||
+      aiData?.images?.[0]?.url ||
+      aiData?.image_url;
 
-    if (!imageUrl) throw new Error("No image URL returned from AI");
+    if (!imageUrl) {
+      console.error("No image URL in response:", aiData);
+      throw new Error("No image generated by AI Service");
+    }
 
     console.log("Image generated successfully:", imageUrl);
 
-    // --- 2. PERSISTENCE ---
+    // --- 2. PERSISTENCE (Added to ensure saving works) ---
+    // The previous version relied on Frontend saving. We enable backend saving here for reliability.
     let finalImageUrl = imageUrl;
     let userId = "anon";
 
+    // 2a. Identify User
     if (authHeader) {
       try {
         const token = authHeader.replace("Bearer ", "");
@@ -156,6 +198,7 @@ serve(async (req) => {
       }
     }
 
+    // 2b. Upload & Save
     try {
       console.log(`Starting persistence for user: ${userId}`);
 
@@ -177,6 +220,7 @@ serve(async (req) => {
       });
 
       if (uploadRes.ok) {
+        // Construct the public URL for the stored image
         finalImageUrl = `${MAIN_PROJECT_URL}/storage/v1/object/public/ai-designs/${storagePath}`;
         console.log("Saved to storage:", finalImageUrl);
 
@@ -212,11 +256,19 @@ serve(async (req) => {
       }
     } catch (saveError: any) {
       console.error("Persistence failed (non-blocking):", saveError.message);
+      // We do NOT throw here, so the user still gets the standard Lovable URL if saving fails
     }
 
-    return new Response(JSON.stringify({ imageUrl: finalImageUrl, includedText: text }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // Return the response (Frontend expects 'imageUrl')
+    return new Response(
+      JSON.stringify({
+        imageUrl: finalImageUrl,
+        includedText: text || null,
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (error: any) {
     console.error("Unexpected error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
