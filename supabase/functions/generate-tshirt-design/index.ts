@@ -191,7 +191,7 @@ Return only the raw design image.
           .from("ai_generations")
           .insert({
             user_id: userId,
-            session_id: crypto.randomUUID(), // Generate a session ID
+            session_id: globalThis.crypto.randomUUID(), // Generate a session ID
             prompt,
             style,
             color_scheme: colorScheme,
