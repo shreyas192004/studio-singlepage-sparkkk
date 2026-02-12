@@ -69,19 +69,18 @@ serve(async (req) => {
     const { prompt, style, colorScheme, aspectRatio, quality, creativity, clothingType, imagePosition, text } =
       validationResult.data;
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    const MAIN_PROJECT_URL = Deno.env.get("MAIN_PROJECT_URL");
-    const MAIN_PROJECT_SERVICE_KEY = Deno.env.get("MAIN_PROJECT_SERVICE_KEY");
+    const missing = [];
+    if (!LOVABLE_API_KEY) missing.push("LOVABLE_API_KEY");
+    if (!MAIN_PROJECT_URL) missing.push("MAIN_PROJECT_URL");
+    if (!MAIN_PROJECT_SERVICE_KEY) missing.push("MAIN_PROJECT_SERVICE_KEY");
 
-    if (!LOVABLE_API_KEY || !MAIN_PROJECT_URL || !MAIN_PROJECT_SERVICE_KEY) {
-      console.error("Missing configuration:", {
-        LOVABLE_API_KEY: !!LOVABLE_API_KEY,
-        MAIN_PROJECT_URL: !!MAIN_PROJECT_URL,
-        MAIN_PROJECT_SERVICE_KEY: !!MAIN_PROJECT_SERVICE_KEY,
+    if (missing.length > 0) {
+      const errorMsg = `Missing secrets in Lovable: ${missing.join(", ")}`;
+      console.error(errorMsg);
+      return new Response(JSON.stringify({ error: errorMsg }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-      throw new Error(
-        "Edge Function secrets not set. Please set MAIN_PROJECT_URL and MAIN_PROJECT_SERVICE_KEY in Lovable.",
-      );
     }
 
     // --- 1. GENERATE IMAGE ---
