@@ -56,7 +56,16 @@ import AIPatternToDesign from "./pages/AIPatternToDesign";
 
 import Products from "@/pages/Products";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,    // Data stays fresh for 5 minutes
+      gcTime: 10 * 60 * 1000,       // Cache kept for 10 minutes
+      refetchOnWindowFocus: false,   // Don't refetch on tab switch
+      retry: 1,                      // Only 1 retry on failure
+    },
+  },
+});
 
 // Component to hold the tracking logic and routes
 const AppRoutes = () => {

@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import {
   Upload,
@@ -146,6 +147,37 @@ export default function AIPatternToDesign() {
       if (error) throw error;
       if (!data?.imageUrl)
         throw new Error("No image returned from AI");
+
+      // Upload generated image to storage and save to DB
+      let storedUrl = data.imageUrl;
+      try {
+        if (data.imageUrl?.startsWith("data:")) {
+          const imgRes = await fetch(data.imageUrl);
+          const blob = await imgRes.blob();
+          const fileName = `pattern_${Date.now()}_${crypto.randomUUID().slice(0, 8)}.png`;
+          const { data: upData, error: upErr } = await supabase.storage
+            .from("ai-designs").upload(fileName, blob, { contentType: "image/png", cacheControl: "3600" });
+          if (!upErr && upData) {
+            const { data: pubUrl } = supabase.storage.from("ai-designs").getPublicUrl(fileName);
+            storedUrl = pubUrl.publicUrl;
+          }
+        }
+      } catch (e) { console.warn("Storage upload failed:", e); }
+
+      // Save to ai_generations for analytics
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from("ai_generations").insert({
+          user_id: user.id,
+          session_id: crypto.randomUUID(),
+          image_url: storedUrl,
+          prompt: designRequest,
+          style: "pattern-to-design",
+          color_scheme: "reference",
+          clothing_type: clothingType,
+          image_position: imagePosition,
+        });
+      }
 
       setGeneratedDesign(data.imageUrl);
       toast.success("Design generated successfully!");
