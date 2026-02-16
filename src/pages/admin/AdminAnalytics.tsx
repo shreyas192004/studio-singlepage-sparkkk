@@ -72,30 +72,27 @@ const AdminAnalytics = () => {
 
   const fetchAnalytics = async () => {
     try {
-      // Try the view first
+      // Exclude image_url from list query — base64 values can be 60MB+ and break JSON parsing
       const { data: generations, error } = await (supabase as any)
         .from("ai_generations_with_email")
-        .select(
-          "id, prompt, style, color_scheme, image_url, session_id, created_at, email"
-        )
+        .select("id, prompt, style, color_scheme, session_id, created_at, email")
         .order("created_at", { ascending: false })
         .limit(50);
 
       if (error) {
-        // Fallback: query ai_generations directly if view fails
         console.warn("View query failed, falling back to direct table query:", error.message);
         const { data: fallbackData } = await supabase
           .from("ai_generations")
-          .select("id, prompt, style, color_scheme, image_url, session_id, created_at, user_id")
+          .select("id, prompt, style, color_scheme, session_id, created_at, user_id")
           .order("created_at", { ascending: false })
           .limit(50);
 
         setStats({
-          aiGenerations: (fallbackData || []).map((g: any) => ({ ...g, email: null })),
+          aiGenerations: (fallbackData || []).map((g: any) => ({ ...g, email: null, image_url: null })),
         });
       } else {
         setStats({
-          aiGenerations: generations || [],
+          aiGenerations: (generations || []).map((g: any) => ({ ...g, image_url: null })),
         });
       }
     } catch (e) {
@@ -104,6 +101,15 @@ const AdminAnalytics = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const fetchGenerationImage = async (gen: AiGeneration) => {
+    const { data } = await supabase
+      .from("ai_generations")
+      .select("image_url")
+      .eq("id", gen.id)
+      .single();
+    setSelectedGen({ ...gen, image_url: data?.image_url || null });
   };
 
   /* -------------------- CSV Export -------------------- */
@@ -211,7 +217,6 @@ const AdminAnalytics = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Image</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Prompt</TableHead>
                   <TableHead>Style</TableHead>
@@ -224,21 +229,8 @@ const AdminAnalytics = () => {
                   <TableRow
                     key={gen.id}
                     className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => setSelectedGen(gen)}
+                    onClick={() => fetchGenerationImage(gen)}
                   >
-                    <TableCell>
-                      {gen.image_url ? (
-                        <img
-                          src={gen.image_url}
-                          className="w-16 h-16 rounded object-cover"
-                        />
-                      ) : (
-                        <div className="w-16 h-16 bg-muted rounded flex items-center justify-center text-xs">
-                          No Image
-                        </div>
-                      )}
-                    </TableCell>
-
                     <TableCell>{gen.email || "Anonymous"}</TableCell>
 
                     <TableCell className="max-w-[300px]">
