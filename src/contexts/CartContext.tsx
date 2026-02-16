@@ -221,9 +221,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (item.color) query = query.eq("selected_color", item.color);
           else query = query.is("selected_color", null);
 
-          if (item.note) query = query.eq("note", item.note);
-          else query = query.is("note", null);
-
           const { error } = await query;
           if (error) throw error;
         } else {
@@ -233,8 +230,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             quantity: qtyToAdd,
             selected_size: item.size || null,
             selected_color: item.color || null,
-            note: item.note || null,
-          });
+          } as any);
           if (error) throw error;
         }
       } catch (error) {

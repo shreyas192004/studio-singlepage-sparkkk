@@ -385,8 +385,8 @@ export default function AIGenerator() {
   }, [searchParams, user]);
 
   useEffect(() => {
-    if (clothingType === "polo") setImagePosition("back");
-    else if (clothingType === "tops") setImagePosition("front");
+    if ((clothingType as string) === "polo") setImagePosition("back");
+    else if ((clothingType as string) === "tops") setImagePosition("front");
     else {
       if (!["front", "back"].includes(imagePosition)) setImagePosition("front");
     }
@@ -1209,7 +1209,7 @@ export default function AIGenerator() {
                                 <SelectItem value="front-back">Front & Back</SelectItem>
                               </>
                             )}
-                          {clothingType === "polo" && (
+                          {(clothingType as string) === "polo" && (
                             <SelectItem value="back">Back</SelectItem>
                           )}
                         </SelectContent>

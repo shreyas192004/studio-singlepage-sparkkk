@@ -254,6 +254,8 @@ export type Database = {
           notes: string | null
           payment_date: string
           payment_method: string
+          payout_week_end: string | null
+          payout_week_start: string | null
           transaction_id: string
         }
         Insert: {
@@ -265,6 +267,8 @@ export type Database = {
           notes?: string | null
           payment_date?: string
           payment_method: string
+          payout_week_end?: string | null
+          payout_week_start?: string | null
           transaction_id: string
         }
         Update: {
@@ -276,6 +280,8 @@ export type Database = {
           notes?: string | null
           payment_date?: string
           payment_method?: string
+          payout_week_end?: string | null
+          payout_week_start?: string | null
           transaction_id?: string
         }
         Relationships: [
@@ -330,10 +336,43 @@ export type Database = {
         }
         Relationships: []
       }
+      manufacturers: {
+        Row: {
+          address: string | null
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       order_items: {
         Row: {
+          cancellation_reason: string | null
           color: string | null
           created_at: string
+          delivery_order_id: string | null
+          designer_paid_at: string | null
+          designer_payment_id: string | null
+          designer_payout_status: string | null
+          dispatch_date: string | null
           id: string
           order_id: string
           product_id: string | null
@@ -341,12 +380,19 @@ export type Database = {
           product_name: string
           quantity: number
           size: string | null
+          status: string | null
           total_price: number
           unit_price: number
         }
         Insert: {
+          cancellation_reason?: string | null
           color?: string | null
           created_at?: string
+          delivery_order_id?: string | null
+          designer_paid_at?: string | null
+          designer_payment_id?: string | null
+          designer_payout_status?: string | null
+          dispatch_date?: string | null
           id?: string
           order_id: string
           product_id?: string | null
@@ -354,12 +400,19 @@ export type Database = {
           product_name: string
           quantity: number
           size?: string | null
+          status?: string | null
           total_price: number
           unit_price: number
         }
         Update: {
+          cancellation_reason?: string | null
           color?: string | null
           created_at?: string
+          delivery_order_id?: string | null
+          designer_paid_at?: string | null
+          designer_payment_id?: string | null
+          designer_payout_status?: string | null
+          dispatch_date?: string | null
           id?: string
           order_id?: string
           product_id?: string | null
@@ -367,6 +420,7 @@ export type Database = {
           product_name?: string
           quantity?: number
           size?: string | null
+          status?: string | null
           total_price?: number
           unit_price?: number
         }

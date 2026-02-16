@@ -90,12 +90,12 @@ const AdminDesignerForm = () => {
         bio: data.bio || "",
         avatar_url: data.avatar_url || "",
         social_links:
-          data.social_links || { instagram: "", twitter: "", website: "" },
+          (data.social_links as any) || { instagram: "", twitter: "", website: "" },
         featured: data.featured || false,
         men_only: data.men_only || false,
         women_only: data.women_only || false,
-        boys_only: data.boys_only || false,
-        girls_only: data.girls_only || false,
+        boys_only: (data as any).boys_only || false,
+        girls_only: (data as any).girls_only || false,
       });
     }
   };

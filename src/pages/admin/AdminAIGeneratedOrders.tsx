@@ -400,7 +400,7 @@ const AdminAIGeneratedOrders = () => {
 
     const { error: updateError } = await supabase
       .from("orders")
-      .update({ status: newStatus })
+      .update({ status: newStatus as any })
       .eq("id", orderId);
 
     if (updateError) {
