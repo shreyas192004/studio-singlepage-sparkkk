@@ -35,12 +35,10 @@ serve(async (req) => {
     const API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!API_KEY) throw new Error("Missing API key");
 
-    // Resolve parameters (frontend sends both old and new field names)
     const garmentType = clothingType || apparelType || "t-shirt";
     const fabricColor = color || apparelColor || "black";
     const placement = imagePosition || designPlacement || "front";
 
-    // Map clothing types to descriptive names
     const garmentNameMap: Record<string, string> = {
       "t-shirt": "classic crew-neck T-shirt",
       "hoodie": "pullover hoodie with kangaroo pocket",
@@ -51,7 +49,6 @@ serve(async (req) => {
     };
     const garmentDesc = garmentNameMap[garmentType] || "T-shirt";
 
-    // Map placement to description
     const placementMap: Record<string, string> = {
       "front": "front center chest area",
       "back": "back center area",
@@ -60,7 +57,8 @@ serve(async (req) => {
     };
     const placementDesc = placementMap[placement] || "front center";
 
-    const designPrompt = `
+    /* ---- MOCKUP PROMPT ---- */
+    const mockupPrompt = `
 You are a professional fashion product photographer and apparel mockup AI.
 
 TASK:
@@ -105,56 +103,120 @@ OUTPUT:
 One single photorealistic product mockup image ready for an e-commerce listing.
 `;
 
-    console.log("Generating Full Mockup...", { prompt, style, garmentType, fabricColor, placement });
+    /* ---- ISOLATED ARTWORK PROMPT ---- */
+    const artworkPrompt = `
+You are a professional print-ready artwork designer.
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
-        messages: [{ role: "user", content: designPrompt }],
-        modalities: ["image"],
+TASK:
+Generate ONLY the isolated design artwork — NO clothing, NO garment, NO mockup.
+
+DESIGN SPECIFICATIONS:
+- Design concept: "${prompt}"
+- Art style: ${style}
+- Color mood: ${colorScheme}
+- Creativity level: ${creativity}%
+${text ? `- Include this text in the design: "${text}"` : "- No text in the design"}
+
+OUTPUT REQUIREMENTS:
+- The artwork must be on a PURE WHITE background (#FFFFFF)
+- Just the design/artwork itself, completely isolated
+- No clothing template, no garment shape, no mannequin
+- High resolution, crisp edges, print-ready quality (300 DPI equivalent)
+- Centered composition, balanced layout
+- The design should be complete and self-contained
+- Colors must be vivid and suitable for fabric printing
+- Edge-to-edge design content with white background surrounding it
+
+DO NOT:
+- Place the design on any clothing or mockup
+- Add any background other than pure white
+- Add watermarks, frames, borders, or labels
+- Show multiple designs or variations
+- Add shadows or 3D effects around the design
+
+OUTPUT:
+One single isolated artwork image on white background, ready for fabric printing.
+`;
+
+    console.log("Generating Mockup + Artwork in parallel...", { prompt, style, garmentType, fabricColor, placement });
+
+    const headers = {
+      Authorization: `Bearer ${API_KEY}`,
+      "Content-Type": "application/json",
+    };
+
+    // Generate both in parallel
+    const [mockupRes, artworkRes] = await Promise.all([
+      fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash-image",
+          messages: [{ role: "user", content: mockupPrompt }],
+          modalities: ["image"],
+        }),
       }),
-    });
+      fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash-image",
+          messages: [{ role: "user", content: artworkPrompt }],
+          modalities: ["image"],
+        }),
+      }),
+    ]);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("AI Generation Error:", response.status, errorText);
-
-      if (response.status === 429) {
+    // Handle mockup response
+    if (!mockupRes.ok) {
+      const errorText = await mockupRes.text();
+      console.error("Mockup Generation Error:", mockupRes.status, errorText);
+      if (mockupRes.status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
+      if (mockupRes.status === 402) {
         return new Response(
           JSON.stringify({ error: "AI credits exhausted. Please add funds to continue generating." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-
-      throw new Error(`AI Generation Failed: ${errorText}`);
+      throw new Error(`Mockup Generation Failed: ${errorText}`);
     }
 
-    const data = await response.json();
+    const mockupData = await mockupRes.json();
     const imageUrl =
-      data?.choices?.[0]?.message?.images?.[0]?.url ||
-      data?.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
-      data?.choices?.[0]?.message?.image_url;
+      mockupData?.choices?.[0]?.message?.images?.[0]?.url ||
+      mockupData?.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
+      mockupData?.choices?.[0]?.message?.image_url;
 
     if (!imageUrl) {
-      console.error("No image URL in response", data);
-      throw new Error("Failed to generate design image");
+      console.error("No mockup image URL in response", mockupData);
+      throw new Error("Failed to generate mockup image");
     }
 
-    console.log("Mockup Generated Successfully");
+    // Handle artwork response (non-critical - don't fail if this errors)
+    let artworkUrl: string | null = null;
+    try {
+      if (artworkRes.ok) {
+        const artworkData = await artworkRes.json();
+        artworkUrl =
+          artworkData?.choices?.[0]?.message?.images?.[0]?.url ||
+          artworkData?.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
+          artworkData?.choices?.[0]?.message?.image_url || null;
+      } else {
+        console.warn("Artwork generation failed, continuing with mockup only");
+      }
+    } catch (artErr) {
+      console.warn("Artwork extraction error:", artErr);
+    }
+
+    console.log("Generation Complete", { hasMockup: !!imageUrl, hasArtwork: !!artworkUrl });
 
     return new Response(
-      JSON.stringify({ imageUrl }),
+      JSON.stringify({ imageUrl, artworkUrl }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
