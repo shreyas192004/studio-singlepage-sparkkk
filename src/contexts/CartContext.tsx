@@ -14,6 +14,7 @@ export interface CartItem {
   color?: string;
   clothing_type?: string;
   is_ai_generated?: boolean;
+  note?: string;
 }
 
 interface AddToCartPayload {
@@ -26,6 +27,7 @@ interface AddToCartPayload {
   color?: string;
   clothing_type?: string;
   is_ai_generated?: boolean;
+  note?: string;
 }
 
 interface CartContextType {
@@ -124,6 +126,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             color: item.selected_color || undefined,
             clothing_type: product?.clothing_type || undefined,
             is_ai_generated: product?.is_ai_generated || false,
+            note: (item as any).note || undefined,
           };
         });
 
@@ -144,6 +147,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   quantity: item.quantity,
                   selected_size: item.size || null,
                   selected_color: item.color || null,
+                  note: item.note || null,
                 });
               }
               setCart(localCart);
@@ -166,7 +170,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const qtyToAdd = item.quantity && item.quantity > 0 ? Math.floor(item.quantity) : 1;
 
     const existingIndex = cart.findIndex(
-      (i) => i.id === item.id && i.size === item.size && i.color === item.color
+      (i) => i.id === item.id && i.size === item.size && i.color === item.color && i.note === item.note
     );
 
     const previousCart = cart;
@@ -194,6 +198,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           quantity: qtyToAdd,
           clothing_type: item.clothing_type,
           is_ai_generated: item.is_ai_generated,
+          note: item.note,
         },
       ];
     }
@@ -216,6 +221,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (item.color) query = query.eq("selected_color", item.color);
           else query = query.is("selected_color", null);
 
+          if (item.note) query = query.eq("note", item.note);
+          else query = query.is("note", null);
+
           const { error } = await query;
           if (error) throw error;
         } else {
@@ -225,6 +233,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             quantity: qtyToAdd,
             selected_size: item.size || null,
             selected_color: item.color || null,
+            note: item.note || null,
           });
           if (error) throw error;
         }

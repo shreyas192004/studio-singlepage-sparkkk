@@ -14,7 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Home, Star } from "lucide-react";
+import { Plus, Edit, Trash2, Home, Star, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 const AdminDesigners = () => {
@@ -90,7 +90,12 @@ const AdminDesigners = () => {
       <header className="border-b">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold">Designers Management</h1>
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" onClick={() => navigate("/admintesora/dashboard")}>
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <h1 className="text-2xl font-bold">Designers Management</h1>
+            </div>
             <div className="flex gap-2">
               <Link to="/admintesora/dashboard">
                 <Button variant="outline">

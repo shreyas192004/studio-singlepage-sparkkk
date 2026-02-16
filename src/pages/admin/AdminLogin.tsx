@@ -1,3 +1,4 @@
+// src/pages/AdminLogin.tsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -6,13 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAdmin } from "@/contexts/AdminContext";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const AdminLogin = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
-  const { signIn, signUp, isAdmin, loading } = useAdmin();
+  const { signIn, signUp, isAdmin, loading, signOut } = useAdmin();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -35,12 +37,51 @@ const AdminLogin = () => {
       return;
     }
 
+    // After sign up: just inform user, don't check roles
     if (isSignUp) {
       toast.success("Account created! Please check your email to verify (or proceed if auto-confirm is enabled).");
-    } else {
-      toast.success("Welcome, Admin!");
+      setIsLoading(false);
+      return;
     }
+
+    // === LOGIN FLOW: check if user is actually an admin ===
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !userData?.user) {
+      console.error("Error fetching user after login:", userError);
+      toast.error("Something went wrong. Please try again.");
+      setIsLoading(false);
+      return;
+    }
+
+    const userId = userData.user.id;
+
+    const { data: roleData, error: roleError } = await (supabase as any)
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    if (roleError) {
+      console.error("Error checking admin role:", roleError);
+      toast.error("Unable to verify admin access. Please try again.");
+      setIsLoading(false);
+      return;
+    }
+
+    // ❌ Not an admin – show error and sign out
+    if (!roleData) {
+      toast.error("You do not have admin access.");
+      await signOut();
+      setIsLoading(false);
+      return;
+    }
+
+    // ✅ Is admin
+    toast.success("Welcome, Admin!");
     navigate("/admintesora/dashboard");
+    setIsLoading(false);
   };
 
   if (loading) {

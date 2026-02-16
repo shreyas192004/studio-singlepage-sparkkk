@@ -7,207 +7,125 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Input validation schema - matches all frontend options exactly (updated)
-const designRequestSchema = z.object({
-  prompt: z
-    .string()
-    .trim()
-    .min(10, "Prompt must be at least 10 characters")
-    .max(500, "Prompt must be under 500 characters"),
-  style: z.enum([
-    "modern",
-    "vintage",
-    "minimalist",
-    "abstract",
-    "retro",
-    "graffiti",
-    "anime",
-    "geometric",
-    "organic",
-    "grunge",
-    "realistic",
-  ]),
-  colorScheme: z.enum([
-    "normal",
-    "vibrant",
-    "pastel",
-    "monochrome",
-    "neon",
-    "earth-tones",
-    "black-white",
-    "cool",
-    "warm",
-    "gradient",
-  ]),
-  aspectRatio: z.enum(["square", "portrait", "landscape"]).optional().default("portrait"),
-  quality: z.enum(["standard", "high", "ultra"]).optional().default("high"),
-  creativity: z.number().min(0).max(100).optional().default(70),
-  text: z.string().trim().max(120).optional(),
-  clothingType: z.enum(["t-shirt", "polo", "hoodie", "tops"]).optional().default("t-shirt"),
-  imagePosition: z.enum(["front", "back"]).optional().default("front"),
+// Input schema matching frontend exactly (but we ignore product fields for generation)
+const schema = z.object({
+  prompt: z.string().min(10).max(500),
+  style: z.string(),
+  colorScheme: z.string(),
+  creativity: z.number().min(0).max(100).default(70),
+
+  // Product fields (kept for schema compatibility but ignored for AI generation)
+  apparelType: z.string().optional(),
+  apparelColor: z.string().optional(),
+  designPlacement: z.string().optional(),
+
+  text: z.string().optional(),
 });
 
 serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const body = await req.json();
-    console.log("Request body received:", body);
+    const { prompt, style, colorScheme, creativity, text } = schema.parse(body);
 
-    const validationResult = designRequestSchema.safeParse(body);
+    const API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!API_KEY) throw new Error("Missing API key");
 
-    if (!validationResult.success) {
-      const errors = validationResult.error.errors.map((e) => ({
-        path: e.path.join("."),
-        message: e.message,
-      }));
-      console.error("Validation errors:", errors);
-      return new Response(JSON.stringify({ error: "Invalid request", details: errors }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    /* ============================================================
+       SINGLE-STEP DESIGN GENERATION
+       Strictly follows "Master Prompt" rules:
+       - Output ONLY the design artwork
+       - NO apparel/mockups/scenes
+       - Transparent background
+       - One clear subject
+    ============================================================ */
 
-    const { prompt, style, colorScheme, aspectRatio, quality, creativity, clothingType, imagePosition, text } =
-      validationResult.data;
+    const designPrompt = `
+You are a professional apparel print designer.
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    console.log("LOVABLE_API_KEY loaded:", LOVABLE_API_KEY ? `${LOVABLE_API_KEY.slice(0, 4)}********` : "NOT FOUND");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("AI API key is not configured");
-    }
+TASK:
+Create a PRINT-READY DESIGN ARTWORK.
 
-    console.log("Generating design with:", {
-      prompt,
-      style,
-      colorScheme,
-      aspectRatio,
-      quality,
-      creativity,
-      clothingType,
-      imagePosition,
-      text: text || "(none)",
-    });
+ABSOLUTE RULES:
+- Generate ONLY the design artwork
+- NO apparel
+- NO mockups
+- NO mannequins
+- NO scenes
+- NO environments
+- NO backgrounds
+- Transparent background only
+- One clear subject
+- Centered
+- High contrast
+- Clean silhouette
 
-    // Aspect ratio description
-    const aspectDesc =
-      aspectRatio === "square" ? "1:1 square" : aspectRatio === "portrait" ? "3:4 portrait" : "4:3 landscape";
+THIS IS FOR:
+T-shirt / hoodie printing
 
-    // Build text instruction conditionally
-    const textInstruction =
-      text && text.length > 0
-        ? `IMPORTANT: Include this text prominently in the design: "${text}". Make the text stylish, readable, and well-integrated with the artwork.`
-        : "Do NOT include any text, words, letters, logos, or watermarks in the design.";
-
-    // Build the enhanced prompt - NO clothing type mentioned to get raw artwork only
-    const enhancedPrompt = `Create a high-quality, print-ready design artwork:
-
-DESIGN CONCEPT:
-${prompt}
-
-SPECIFICATIONS:
+DESIGN DETAILS:
+- Prompt: "${prompt}"
 - Style: ${style}
-- Color scheme: ${colorScheme}
-- Quality: ${quality}
-- Creativity level: ${creativity}%
-- Aspect ratio: ${aspectDesc}
+- Color Scheme: ${colorScheme}
+- Creativity Level: ${creativity}%
 
-TEXT REQUIREMENT:
-${textInstruction}
+TEXT:
+${text ? `Include text ONLY if explicitly provided: "${text}"` : "Do NOT include any text."}
 
-OUTPUT REQUIREMENTS:
-- Just the artwork/graphic itself, NOT placed on any clothing or mockup
-- design should full as per aspect ratio ${aspectDesc}
-- High-resolution suitable for print (300 DPI)
-- Centered and balanced composition
-- No watermarks, signatures, or backgrounds
-- The design should be isolated and ready to overlay on any surface`;
+FAIL IF:
+- Any background exists
+- Multiple subjects exist
+- It looks like a poster or scene
 
-    console.log("Enhanced prompt:", enhancedPrompt);
+OUTPUT FORMAT:
+Return only the raw design image.
+`;
 
-    // Call AI gateway
+    console.log("Generating Single-Step Design...", { prompt, style });
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-image",
-        messages: [{ role: "user", content: enhancedPrompt }],
-        modalities: ["image", "text"],
+        messages: [{ role: "user", content: designPrompt }],
+        modalities: ["image"],
       }),
     });
 
     if (!response.ok) {
-      const status = response.status;
       const errorText = await response.text();
-      console.error("AI gateway error:", status, errorText);
-
-      if (status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required. Please add funds to your account." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      return new Response(JSON.stringify({ error: "AI service error", details: errorText }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.error("AI Generation Error:", response.status, errorText);
+      throw new Error(`AI Generation Failed: ${errorText}`);
     }
 
     const data = await response.json();
-    console.log("AI response:", JSON.stringify(data, null, 2));
-
-    // Extract image URL from various possible response formats
     const imageUrl =
-      data?.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
       data?.choices?.[0]?.message?.images?.[0]?.url ||
-      data?.choices?.[0]?.message?.image_url ||
-      data?.output?.[0]?.url ||
-      data?.data?.[0]?.url ||
-      data?.images?.[0]?.url ||
-      data?.image_url ||
-      null;
+      data?.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
+      data?.choices?.[0]?.message?.image_url;
 
     if (!imageUrl) {
-      console.error("No image URL in response:", data);
-      throw new Error("No image generated");
+      console.error("No image URL in response", data);
+      throw new Error("Failed to generate design image");
     }
 
-    console.log("Generated image URL:", imageUrl);
+    console.log("Design Generated Successfully:", imageUrl);
 
     return new Response(
-      JSON.stringify({
-        imageUrl,
-        includedText: text || null,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      JSON.stringify({ imageUrl }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("Function error:", error);
+
+  } catch (err: any) {
+    console.error("Function Error:", err);
     return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : "Unknown error",
-      }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }),
+      { status: 500, headers: corsHeaders }
     );
   }
 });

@@ -1,8 +1,10 @@
+// src/pages/CheckoutPage.tsx
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CreditCard, Download, Tag, X } from 'lucide-react';
+import { ArrowLeft, CreditCard, Download, Tag, X, Minus, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { useCart } from '@/contexts/CartContext';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useState, useEffect } from 'react';
@@ -17,11 +19,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+// @ts-ignore - html2pdf doesn't have perfect TS types
+import html2pdf from 'html2pdf.js';
+
+// Razorpay global type
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
 export const CheckoutPage = () => {
   const navigate = useNavigate();
-  const { cart, cartTotal, clearCart } = useCart();
-  const { user } = useAuth();
+  const { cart, cartTotal, clearCart, updateQuantity, removeFromCart } = useCart();
+  const { user, session } = useAuth();
+
   const [formData, setFormData] = useState({
     email: '',
     name: '',
@@ -29,6 +41,7 @@ export const CheckoutPage = () => {
     city: '',
     pincode: '',
     phone: '',
+    specialInstructions: '',
   });
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderId, setOrderId] = useState('');
@@ -37,33 +50,60 @@ export const CheckoutPage = () => {
 
   // Coupon and discount states
   const [couponCode, setCouponCode] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number } | null>(null);
+
+  // Coupon with percentage discount
+  type AppliedCoupon = {
+    code: string;
+    discountPercent: number;      // Percentage value (0-100)
+    calculatedDiscount: number;   // Calculated ₹ amount
+  };
+
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
+
   const [isFirstOrder, setIsFirstOrder] = useState(false);
   const [firstOrderDiscount, setFirstOrderDiscount] = useState(0);
   const [applyingCoupon, setApplyingCoupon] = useState(false);
 
+  // ---------- helpers ----------
+  const escapeHtml = (s: string | number | null | undefined) => {
+    if (s === null || s === undefined) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  };
+
   // Check first order status
   useEffect(() => {
     const checkFirstOrder = async () => {
-      if (user) {
-        try {
-          const { data, error } = await supabase
-            .from('user_order_stats')
-            .select('*')
-            .eq('user_id', user.id)
-            .single();
+      if (!user) return;
 
-          if (error || !data) {
-            setIsFirstOrder(true);
-          } else {
-            setIsFirstOrder(data.order_count === 0 && !data.first_order_discount_used);
-          }
-        } catch (err) {
-          console.error('Error checking first order:', err);
+      try {
+        const { data, error } = await supabase
+          .from('user_order_stats')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle(); // no 406 on 0 rows
+
+        if (error) {
+          console.error('Error checking first order:', error);
           setIsFirstOrder(false);
+          return;
         }
+
+        if (!data) {
+          // no stats row yet → definitely first order
+          setIsFirstOrder(true);
+        } else {
+          setIsFirstOrder(data.order_count === 0 && !data.first_order_discount_used);
+        }
+      } catch (err) {
+        console.error('Error checking first order:', err);
+        setIsFirstOrder(false);
       }
     };
+
     checkFirstOrder();
   }, [user]);
 
@@ -78,56 +118,89 @@ export const CheckoutPage = () => {
 
   const applyCoupon = async () => {
     if (!couponCode.trim()) {
-      toast.error('Please enter a coupon code');
+      toast.error("Please enter a coupon code");
       return;
     }
 
     setApplyingCoupon(true);
+
     try {
       const { data, error } = await supabase
-        .from('coupon_codes')
-        .select('*')
-        .eq('code', couponCode.toUpperCase())
-        .eq('is_active', true)
+        .from("coupon_codes")
+        .select("*")
+        .eq("code", couponCode.toUpperCase())
+        .eq("is_active", true)
         .single();
 
       if (error || !data) {
-        toast.error('Invalid coupon code');
+        toast.error("Invalid coupon code");
         return;
       }
 
       const coupon = data as any;
       const now = new Date();
-      const validFrom = new Date(coupon.valid_from);
-      const validUntil = new Date(coupon.valid_until);
 
-      if (now < validFrom || now > validUntil) {
-        toast.error('Coupon has expired or is not yet valid');
+      // ✅ Safe date validation
+      const validFrom = coupon.valid_from ? new Date(coupon.valid_from) : null;
+      const validUntil = coupon.valid_until ? new Date(coupon.valid_until) : null;
+
+      if (validFrom && now < validFrom) {
+        toast.error("Coupon not yet active");
         return;
       }
 
+      if (validUntil && now > validUntil) {
+        toast.error("Coupon has expired");
+        return;
+      }
+
+      // Usage limit
       if (coupon.max_uses && coupon.current_uses >= coupon.max_uses) {
-        toast.error('Coupon usage limit reached');
+        toast.error("Coupon usage limit reached");
         return;
       }
 
-      if (cartTotal < coupon.min_order_amount) {
-        toast.error(`Minimum order amount is ₹${coupon.min_order_amount} for this coupon`);
+      // Min order check
+      const minOrder = Number(coupon.min_order_amount ?? 0);
+      if (cartTotal < minOrder) {
+        toast.error(`Minimum order amount is ₹${minOrder}`);
+        return;
+      }
+
+      // ✅ PERCENTAGE: discount_amount is a percentage (0-100)
+      const discountPercent = Number(coupon.discount_amount ?? 0);
+
+      // Validate percentage range
+      if (isNaN(discountPercent) || discountPercent < 0 || discountPercent > 100) {
+        toast.error("Invalid coupon configuration");
+        return;
+      }
+
+      // Calculate discount as percentage of cart total
+      const calculatedDiscount = Math.round((cartTotal * discountPercent) / 100);
+
+      if (calculatedDiscount <= 0) {
+        toast.error("Invalid discount amount");
         return;
       }
 
       setAppliedCoupon({
         code: coupon.code,
-        discount: Number(coupon.discount_amount),
+        discountPercent,
+        calculatedDiscount,
       });
-      toast.success(`Coupon applied! ₹${coupon.discount_amount} discount`);
+
+      toast.success(
+        `${discountPercent}% OFF applied (-₹${calculatedDiscount})`
+      );
     } catch (err) {
-      console.error('Error applying coupon:', err);
-      toast.error('Failed to apply coupon');
+      console.error("Error applying coupon:", err);
+      toast.error("Failed to apply coupon");
     } finally {
       setApplyingCoupon(false);
     }
   };
+
 
   const removeCoupon = () => {
     setAppliedCoupon(null);
@@ -136,7 +209,7 @@ export const CheckoutPage = () => {
   };
 
   // Calculate totals
-  const totalDiscount = (appliedCoupon?.discount || 0) + firstOrderDiscount;
+  const totalDiscount = (appliedCoupon?.calculatedDiscount || 0) + firstOrderDiscount;
   const finalTotal = Math.max(0, cartTotal - totalDiscount);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -146,28 +219,278 @@ export const CheckoutPage = () => {
     });
   };
 
+  // Cart modification handlers
+  const handleIncrease = (item: any) => {
+    const nextQty = (Number(item.quantity) || 0) + 1;
+    if (nextQty > 9) return; // Limit to 9 items per type
+    updateQuantity(item.id, nextQty, item.size, item.color);
+  };
+
+  const handleDecrease = (item: any) => {
+    const nextQty = (Number(item.quantity) || 0) - 1;
+    if (nextQty < 1) {
+      removeFromCart(item.id, item.size, item.color);
+      return;
+    }
+    updateQuantity(item.id, nextQty, item.size, item.color);
+  };
+
+  // ---------- Invoice HTML + PDF ----------
+  const generateInvoiceHTML = (orderNumber: string) => {
+    const invoiceDate = new Date().toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    const itemsRows = cart
+      .map(
+        (item) => `
+        <tr>
+          <td>${escapeHtml(item.name)}</td>
+          <td>
+            ${item.size
+            ? `<span style="display:inline-block;margin-right:8px;background:#e3f2fd;padding:3px 8px;border-radius:4px;font-weight:600;">Size&nbsp;${escapeHtml(
+              item.size
+            )}</span>`
+            : ''
+          }
+            ${item.color
+            ? `<span style="display:inline-block;margin-right:8px;background:#e3f2fd;padding:3px 8px;border-radius:4px;font-weight:600;">Color&nbsp;${escapeHtml(
+              item.color
+            )}</span>`
+            : ''
+          }
+          </td>
+          <td class="right">${item.quantity}</td>
+          <td class="right">Rs ${item.price.toFixed(2)}</td>
+          <td class="right">Rs ${(item.price * item.quantity).toFixed(2)}</td>
+        </tr>`
+      )
+      .join('');
+
+    return `
+    <!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Invoice #${orderNumber}</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    color: #333;
+    line-height: 1.5;
+    font-size: 12px;
+    background: #fff;
+  }
+  .page {
+    /* Reduced width from 800px to 700px to fit standard A4 margins */
+    width: 700px;
+    margin: 20px auto;
+    padding: 10px;
+  }
+  .header {
+    text-align: center;
+    margin-bottom: 22px;
+    padding-bottom: 14px;
+    border-bottom: 2px solid #000;
+  }
+  .header h1 {
+    margin: 0;
+    font-size: 28px;
+    letter-spacing: 1px;
+  }
+  .header p {
+    margin: 3px 0;
+    color: #666;
+  }
+  .invoice-info {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 22px;
+    width: 100%;
+  }
+  .info-column {
+    flex: 1;
+    /* Forces blocks to stay within their half of the page */
+    max-width: 48%; 
+  }
+  .section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+  }
+  .info-block {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+  }
+  th {
+    background-color: #f8f9fa;
+    padding: 10px;
+    text-align: left;
+    border-bottom: 2px solid #ddd;
+    font-weight: 600;
+  }
+  td {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+  }
+  .right { 
+    text-align: right; 
+    /* Padding buffer to prevent edge cropping */
+    padding-right: 8px; 
+  }
+  .totals {
+    width: 280px;
+    margin-left: auto;
+    margin-top: 20px;
+  }
+  .totals td {
+    border: none;
+    padding: 5px 10px;
+  }
+  .total-row {
+    font-weight: 700;
+    font-size: 15px;
+    border-top: 2px solid #000 !important;
+  }
+  .total-row td {
+      padding-top: 10px;
+  }
+  .footer {
+    margin-top: 40px;
+    text-align: center;
+    color: #999;
+    font-size: 11px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <h1>INVOICE</h1>
+    <p>Order #${escapeHtml(orderNumber)}</p>
+    <p>${escapeHtml(invoiceDate)}</p>
+  </div>
+
+  <div class="invoice-info">
+    <div class="info-column">
+      <div class="section-title">Bill To</div>
+      <div class="info-block">
+        <strong>${escapeHtml(formData.name)}</strong><br/>
+        ${escapeHtml(formData.address)}<br/>
+        ${escapeHtml(formData.city)}, ${escapeHtml(formData.pincode)}<br/>
+        <strong>Phone:</strong> ${escapeHtml(formData.phone)}<br/>
+        <strong>Email:</strong> ${escapeHtml(formData.email)}
+      </div>
+    </div>
+    <div class="info-column" style="text-align: right;">
+      <div class="section-title">Ship To</div>
+      <div class="info-block">
+        <strong>${escapeHtml(formData.name)}</strong><br/>
+        ${escapeHtml(formData.address)}<br/>
+        ${escapeHtml(formData.city)}, ${escapeHtml(formData.pincode)}
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title">Items</div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 28%;">Item</th>
+        <th style="width: 32%;">Details</th>
+        <th style="width: 10%;" class="right">Qty</th>
+        <th style="width: 15%;" class="right">Price</th>
+        <th style="width: 15%;" class="right">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itemsRows}
+    </tbody>
+  </table>
+
+  <table class="totals">
+    <tr>
+      <td>Subtotal</td>
+      <td class="right">Rs ${cartTotal.toFixed(2)}</td>
+    </tr>
+    ${appliedCoupon
+        ? `<tr style="color:#16a34a;">
+             <td>Coupon (${escapeHtml(appliedCoupon.code)}):</td>
+             <td class="right">-Rs ${appliedCoupon.calculatedDiscount.toFixed(2)}</td>
+           </tr>`
+        : ''
+      }
+    ${firstOrderDiscount > 0
+        ? `<tr style="color:#16a34a;">
+             <td>First Order Discount (5%):</td>
+             <td class="right">-Rs ${firstOrderDiscount.toFixed(2)}</td>
+           </tr>`
+        : ''
+      }
+    <tr>
+      <td>Shipping</td>
+      <td class="right">Free</td>
+    </tr>
+    <tr class="total-row">
+      <td>Total</td>
+      <td class="right">Rs ${finalTotal.toFixed(2)}</td>
+    </tr>
+  </table>
+
+  <div class="footer">
+    Thank you for your purchase!<br/>
+    If you have any questions about this invoice, please contact us.
+  </div>
+</div>
+</body>
+</html>
+`;
+  };
+
   const generateInvoicePDF = (orderNumber: string) => {
-    const invoiceHTML = generateInvoiceHTML(orderNumber);
-    
-    // Create a Blob from the HTML
-    const blob = new Blob([invoiceHTML], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    
-    // Create a temporary link and trigger download
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Invoice_${orderNumber}.html`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const html = generateInvoiceHTML(orderNumber);
+
+    const opt = {
+      margin: 8,
+      filename: `Invoice_${orderNumber}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
+    };
+
+    // @ts-ignore
+    html2pdf().set(opt).from(html).save();
   };
 
   const handlePlaceOrder = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate form
-    if (!formData.email || !formData.name || !formData.address || !formData.city || !formData.pincode || !formData.phone) {
+    if (
+      !formData.email ||
+      !formData.name ||
+      !formData.address ||
+      !formData.city ||
+      !formData.pincode ||
+      !formData.phone
+    ) {
       toast.error('Please fill in all fields');
       return;
     }
@@ -177,23 +500,28 @@ export const CheckoutPage = () => {
       return;
     }
 
+    if (finalTotal <= 0) {
+      toast.error('Order total must be greater than 0 to proceed with payment');
+      return;
+    }
+
     // Show confirmation dialog
     setShowConfirmDialog(true);
   };
 
-  const confirmAndPlaceOrder = async () => {
-  setShowConfirmDialog(false);
-  setIsProcessing(true);
-
-  try {
-    // Generate order number
-    const newOrderId = `ORD${Date.now().toString().slice(-8)}`;
+  // 👉 Helper: create order in Supabase AFTER payment is verified
+  const createOrderInSupabase = async (
+    newOrderId: string,
+    razorpayPaymentId: string,
+    razorpayOrderId: string
+  ) => {
+    if (!user) throw new Error('No user found while creating order');
 
     // 1) Create shipping address
     const { data: addressData, error: addressError } = await supabase
       .from('addresses')
       .insert({
-        user_id: user!.id,
+        user_id: user.id,
         address_type: 'shipping',
         full_name: formData.name,
         phone: formData.phone,
@@ -208,10 +536,10 @@ export const CheckoutPage = () => {
 
     if (addressError) throw addressError;
 
-    // 2) Generate and upload invoice to storage
+    // 2) Generate and upload invoice HTML to storage
     const invoiceHTML = generateInvoiceHTML(newOrderId);
     const blob = new Blob([invoiceHTML], { type: 'text/html' });
-    
+
     const { error: uploadError } = await supabase.storage
       .from('invoices')
       .upload(`${newOrderId}.html`, blob, {
@@ -230,24 +558,45 @@ export const CheckoutPage = () => {
     const { data: orderData, error: orderError } = await supabase
       .from('orders')
       .insert({
-        user_id: user!.id,
+        user_id: user.id,
         order_number: newOrderId,
         total_amount: finalTotal,
         status: 'pending',
-        payment_status: 'pending',
-        payment_method: 'cash_on_delivery',
+        payment_status: 'paid',
+        payment_method: 'razorpay',
         shipping_address_id: addressData.id,
         billing_address_id: addressData.id,
         invoice_url: urlData.publicUrl,
-        notes: appliedCoupon
-          ? `Coupon: ${appliedCoupon.code} (-₹${appliedCoupon.discount})${
-              firstOrderDiscount > 0
-                ? `, First Order Discount (-₹${firstOrderDiscount})`
-                : ''
-            }`
-          : firstOrderDiscount > 0
-          ? `First Order Discount (-₹${firstOrderDiscount})`
-          : null,
+        notes: (() => {
+          let notes = '';
+          if (appliedCoupon) {
+            notes += `Coupon: ${appliedCoupon.code} (${appliedCoupon.discountPercent}% OFF, -₹${appliedCoupon.calculatedDiscount})`;
+          }
+          if (firstOrderDiscount > 0) {
+            if (notes) notes += ', ';
+            notes += `First Order Discount (-₹${firstOrderDiscount})`;
+          }
+          if (formData.specialInstructions.trim()) {
+            if (notes) notes += '. ';
+            notes += `Special Instructions: ${formData.specialInstructions.trim()}`;
+          }
+
+          // Aggregate Item notes
+          const itemNotes = cart
+            .map(item => (item as any).note ? `${item.name}: ${(item as any).note}` : null)
+            .filter(Boolean)
+            .join("; ");
+
+          if (itemNotes) {
+            notes = notes ? `${notes} | ${itemNotes}` : itemNotes;
+          }
+
+          // Append Razorpay IDs
+          const rpInfo = `Difference: RP_OID: ${razorpayOrderId} | RP_PID: ${razorpayPaymentId}`;
+          notes = notes ? `${notes} | ${rpInfo}` : rpInfo;
+
+          return notes || null;
+        })(),
       })
       .select()
       .single();
@@ -261,7 +610,7 @@ export const CheckoutPage = () => {
         .select('current_uses')
         .eq('code', appliedCoupon.code)
         .single();
-      
+
       if (couponData) {
         await supabase
           .from('coupon_codes')
@@ -276,30 +625,28 @@ export const CheckoutPage = () => {
         .from('user_order_stats')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (existingStats) {
         await supabase
           .from('user_order_stats')
-          .update({ 
+          .update({
             first_order_discount_used: true,
             order_count: existingStats.order_count + 1,
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
           })
           .eq('user_id', user.id);
       } else {
-        await supabase
-          .from('user_order_stats')
-          .insert({
-            user_id: user.id,
-            order_count: 1,
-            first_order_discount_used: true,
-          });
+        await supabase.from('user_order_stats').insert({
+          user_id: user.id,
+          order_count: 1,
+          first_order_discount_used: true,
+        });
       }
     }
 
     // 7) Insert order items
-    const orderItems = cart.map(item => ({
+    const orderItems = cart.map((item) => ({
       order_id: orderData.id,
       product_id: item.id.toString(),
       product_name: item.name,
@@ -311,9 +658,7 @@ export const CheckoutPage = () => {
       color: item.color || null,
     }));
 
-    const { error: itemsError } = await supabase
-      .from('order_items')
-      .insert(orderItems);
+    const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
 
     if (itemsError) throw itemsError;
 
@@ -324,7 +669,7 @@ export const CheckoutPage = () => {
           .from('user_generation_stats')
           .select('generation_count')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (!genError && genStats && genStats.generation_count >= 20) {
           await supabase
@@ -344,197 +689,126 @@ export const CheckoutPage = () => {
     setOrderId(newOrderId);
     setOrderPlaced(true);
 
+    // auto-download PDF
     setTimeout(() => {
       generateInvoicePDF(newOrderId);
     }, 500);
 
     toast.success('Order placed successfully!');
-  } catch (error: any) {
-    console.error('Error placing order:', error);
-    toast.error(error.message || 'Failed to place order. Please try again.');
-  } finally {
-    setIsProcessing(false);
-  }
-};
+  };
 
-  const generateInvoiceHTML = (orderNumber: string) => {
-    const invoiceDate = new Date().toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    });
+  // 🔐 MAIN: Confirm button → Razorpay via supabase.functions.invoke → then create order
+  const confirmAndPlaceOrder = async () => {
+    setShowConfirmDialog(false);
+    setIsProcessing(true);
 
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Invoice #${orderNumber}</title>
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            color: #333;
-          }
-          .header {
-            text-align: center;
-            margin-bottom: 30px;
-            border-bottom: 2px solid #000;
-            padding-bottom: 20px;
-          }
-          .header h1 {
-            margin: 0;
-            font-size: 32px;
-          }
-          .header p {
-            margin: 5px 0;
-            color: #666;
-          }
-          .invoice-info {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 30px;
-          }
-          .section {
-            margin-bottom: 20px;
-          }
-          .section h3 {
-            margin-bottom: 10px;
-            font-size: 14px;
-            color: #666;
-            text-transform: uppercase;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-          }
-          th {
-            background-color: #f5f5f5;
-            padding: 12px;
-            text-align: left;
-            border-bottom: 2px solid #ddd;
-            font-weight: 600;
-          }
-          td {
-            padding: 12px;
-            border-bottom: 1px solid #eee;
-          }
-          .text-right {
-            text-align: right;
-          }
-          .totals {
-            margin-left: auto;
-            width: 300px;
-          }
-          .totals table {
-            margin-bottom: 0;
-          }
-          .totals td {
-            border: none;
-            padding: 8px 12px;
-          }
-          .total-row {
-            font-weight: bold;
-            font-size: 18px;
-            border-top: 2px solid #000 !important;
-          }
-          .footer {
-            margin-top: 50px;
-            text-align: center;
-            color: #666;
-            font-size: 12px;
-            border-top: 1px solid #ddd;
-            padding-top: 20px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>INVOICE</h1>
-          <p>Order #${orderNumber}</p>
-          <p>Date: ${invoiceDate}</p>
-        </div>
+    try {
+      if (!user || !session) {
+        toast.error('Session expired. Please sign in again.');
+        setIsProcessing(false);
+        return;
+      }
 
-        <div class="invoice-info">
-          <div class="section">
-            <h3>Bill To:</h3>
-            <p><strong>${formData.name}</strong></p>
-            <p>${formData.address}</p>
-            <p>${formData.city}, ${formData.pincode}</p>
-            <p>Phone: ${formData.phone}</p>
-            <p>Email: ${formData.email}</p>
-          </div>
-          <div class="section">
-            <h3>Ship To:</h3>
-            <p><strong>${formData.name}</strong></p>
-            <p>${formData.address}</p>
-            <p>${formData.city}, ${formData.pincode}</p>
-          </div>
-        </div>
+      const newOrderId = `ORD${Date.now().toString().slice(-8)}`;
 
-        <table>
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Details</th>
-              <th class="text-right">Quantity</th>
-              <th class="text-right">Price</th>
-              <th class="text-right">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${cart.map(item => `
-              <tr>
-                <td>${item.name}</td>
-                <td>
-                  ${item.size ? `Size: ${item.size}<br>` : ''}
-                  ${item.color ? `Color: ${item.color}` : ''}
-                </td>
-                <td class="text-right">${item.quantity}</td>
-                <td class="text-right">Rs ${item.price.toFixed(2)}</td>
-                <td class="text-right">Rs ${(item.price * item.quantity).toFixed(2)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+      // 1️⃣ Create Razorpay order via Edge Function WITH AUTH HEADER
+      const { data, error } = await supabase.functions.invoke('razorpay-create-order', {
+        body: {
+          amount: finalTotal, // rupees
+          currency: 'INR',
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
 
-        <div class="totals">
-          <table>
-            <tr>
-              <td>Subtotal:</td>
-              <td class="text-right">Rs ${cartTotal.toFixed(2)}</td>
-            </tr>
-            ${appliedCoupon ? `
-            <tr style="color: #16a34a;">
-              <td>Coupon (${appliedCoupon.code}):</td>
-              <td class="text-right">-Rs ${appliedCoupon.discount.toFixed(2)}</td>
-            </tr>
-            ` : ''}
-            ${firstOrderDiscount > 0 ? `
-            <tr style="color: #16a34a;">
-              <td>First Order Discount (5%):</td>
-              <td class="text-right">-Rs ${firstOrderDiscount.toFixed(2)}</td>
-            </tr>
-            ` : ''}
-            <tr>
-              <td>Shipping:</td>
-              <td class="text-right">Free</td>
-            </tr>
-            <tr class="total-row">
-              <td>Total:</td>
-              <td class="text-right">Rs ${finalTotal.toFixed(2)}</td>
-            </tr>
-          </table>
-        </div>
+      if (error || !data) {
+        console.error('razorpay-create-order error:', error);
+        if ((error as any)?.context) {
+          try {
+            const ctx = await (error as any).context.json();
+            console.error('Edge Function response:', ctx);
+          } catch (e) {
+            console.error('Failed to parse error context:', e);
+          }
+        }
+        toast.error('Failed to start payment');
+        setIsProcessing(false);
+        return;
+      }
 
-        <div class="footer">
-          <p>Thank you for your purchase!</p>
-          <p>If you have any questions about this invoice, please contact us.</p>
-        </div>
-      </body>
-      </html>
-    `;
+      const { orderId, keyId, amount, currency } = data as any;
+
+      // 2️⃣ Open Razorpay Checkout
+      const options = {
+        key: keyId,
+        amount, // in paise (from function)
+        currency,
+        name: 'Tesora Lifestyle',
+        description: `Order ${newOrderId}`,
+        order_id: orderId,
+        prefill: {
+          name: formData.name,
+          email: formData.email,
+          contact: formData.phone,
+        },
+        theme: {
+          color: '#111827',
+        },
+        handler: async (response: any) => {
+          try {
+            // 3️⃣ Verify payment via Edge Function (also with auth header)
+            const { data: verifyData, error: verifyError } = await supabase.functions.invoke(
+              'razorpay-verify-payment',
+              {
+                body: {
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                },
+                headers: {
+                  Authorization: `Bearer ${session.access_token}`,
+                },
+              }
+            );
+
+            if (verifyError || !verifyData || !(verifyData as any).success) {
+              console.error('razorpay-verify-payment error:', verifyError, verifyData);
+              toast.error('Payment verification failed');
+              setIsProcessing(false);
+              return;
+            }
+
+            // 4️⃣ Payment is verified → create order in Supabase
+            await createOrderInSupabase(
+              newOrderId,
+              response.razorpay_payment_id,
+              response.razorpay_order_id
+            );
+          } catch (err: any) {
+            console.error('Error after payment:', err);
+            toast.error(
+              err?.message || 'Something went wrong after payment. Please contact support.'
+            );
+          } finally {
+            setIsProcessing(false);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setIsProcessing(false);
+            toast.message('Payment cancelled');
+          },
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (error: any) {
+      console.error('Error starting Razorpay:', error);
+      toast.error('Failed to start payment. Please try again.');
+      setIsProcessing(false);
+    }
   };
 
   const handleContinue = () => {
@@ -561,14 +835,25 @@ export const CheckoutPage = () => {
         <div className="max-w-md w-full mx-4">
           <div className="bg-card border rounded-lg p-8 text-center">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              <svg
+                className="w-8 h-8 text-green-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
               </svg>
             </div>
             <h2 className="text-2xl font-bold mb-2">Order Placed Successfully!</h2>
             <p className="text-muted-foreground mb-4">Order ID: {orderId}</p>
             <p className="text-sm text-muted-foreground mb-6">
-              Your invoice has been downloaded. A confirmation email has been sent to {formData.email}
+              Your invoice PDF has been downloaded. A confirmation email has been sent to{' '}
+              {formData.email}
             </p>
             <div className="space-y-3">
               <Button
@@ -592,17 +877,14 @@ export const CheckoutPage = () => {
     );
   }
 
+  // Main checkout UI
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b sticky top-0 bg-background z-10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate(-1)}
-            >
+            <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <CreditCard className="w-5 h-5" />
@@ -715,18 +997,21 @@ export const CheckoutPage = () => {
                   Please review your order details before confirming.
                 </DialogDescription>
               </DialogHeader>
-              
+
               <div className="space-y-4">
                 <div>
                   <h4 className="font-semibold mb-2">Shipping To:</h4>
                   <p className="text-sm text-muted-foreground">
-                    {formData.name}<br />
-                    {formData.address}<br />
-                    {formData.city}, {formData.pincode}<br />
+                    {formData.name}
+                    <br />
+                    {formData.address}
+                    <br />
+                    {formData.city}, {formData.pincode}
+                    <br />
                     {formData.phone}
                   </p>
                 </div>
-                
+
                 <div>
                   <h4 className="font-semibold mb-2">Order Summary:</h4>
                   <div className="text-sm space-y-1">
@@ -735,7 +1020,7 @@ export const CheckoutPage = () => {
                     </p>
                     {appliedCoupon && (
                       <p className="text-green-600">
-                        Coupon ({appliedCoupon.code}): -Rs {appliedCoupon.discount.toFixed(2)}
+                        Coupon ({appliedCoupon.code}): -Rs {appliedCoupon.calculatedDiscount.toFixed(2)}
                       </p>
                     )}
                     {firstOrderDiscount > 0 && (
@@ -773,27 +1058,62 @@ export const CheckoutPage = () => {
           <div className="lg:col-span-1">
             <div className="bg-card border rounded-lg p-6 sticky top-24">
               <h2 className="text-lg font-semibold mb-4">Order Summary</h2>
-              
+
               <ScrollArea className="max-h-96 mb-4">
                 <div className="space-y-4">
                   {cart.map((item, index) => (
-                    <div key={`${item.id}-${index}`} className="flex gap-3">
+                    <div key={`${item.id}-${index}`} className="flex gap-3 relative group">
                       <img
                         src={item.image}
                         alt={item.name}
                         className="w-16 h-16 object-cover rounded-lg"
                       />
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-sm truncate">{item.name}</h4>
-                        {item.size && (
-                          <p className="text-xs text-muted-foreground">Size: {item.size}</p>
+                        <div className="flex justify-between items-start">
+                          <h4 className="font-medium text-sm truncate pr-6">{item.name}</h4>
+                          <button
+                            onClick={() => removeFromCart(item.id, item.size, item.color)}
+                            className="text-muted-foreground hover:text-destructive transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {(item as any).note && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Note: {(item as any).note}
+                          </div>
                         )}
-                        {item.color && (
-                          <p className="text-xs text-muted-foreground">Color: {item.color}</p>
-                        )}
-                        <div className="flex justify-between items-center mt-1">
-                          <span className="text-xs text-muted-foreground">Qty: {item.quantity}</span>
-                          <span className="text-sm font-semibold">Rs {(item.price * item.quantity).toFixed(2)}</span>
+                        <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                          {item.size && <span>Size: {item.size}</span>}
+                          {item.color && <span>Color: {item.color}</span>}
+                        </div>
+
+                        <div className="flex justify-between items-center mt-2">
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={() => handleDecrease(item)}
+                            >
+                              <Minus className="w-3 h-3" />
+                            </Button>
+                            <span className="text-sm font-medium w-4 text-center">
+                              {item.quantity}
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={() => handleIncrease(item)}
+                              disabled={item.quantity >= 9}
+                            >
+                              <Plus className="w-3 h-3" />
+                            </Button>
+                          </div>
+                          <span className="text-sm font-semibold">
+                            Rs {(item.price * item.quantity).toFixed(2)}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -808,8 +1128,12 @@ export const CheckoutPage = () => {
                   <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-3">
                     <div className="flex items-center gap-2">
                       <Tag className="w-4 h-4 text-green-600" />
-                      <span className="font-medium text-green-700">{appliedCoupon.code}</span>
-                      <span className="text-green-600">(-₹{appliedCoupon.discount})</span>
+                      <span className="font-medium text-green-700">
+                        {appliedCoupon.code}
+                      </span>
+                      <span className="text-green-600">
+                        (-₹{appliedCoupon.calculatedDiscount})
+                      </span>
                     </div>
                     <Button variant="ghost" size="sm" onClick={removeCoupon}>
                       <X className="w-4 h-4" />
@@ -842,7 +1166,7 @@ export const CheckoutPage = () => {
                 {appliedCoupon && (
                   <div className="flex justify-between text-sm text-green-600">
                     <span>Coupon ({appliedCoupon.code})</span>
-                    <span>-Rs {appliedCoupon.discount.toFixed(2)}</span>
+                    <span>-Rs {appliedCoupon.calculatedDiscount.toFixed(2)}</span>
                   </div>
                 )}
                 {firstOrderDiscount > 0 && (

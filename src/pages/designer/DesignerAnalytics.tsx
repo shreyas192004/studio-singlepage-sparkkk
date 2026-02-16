@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Home, Download } from "lucide-react";
+import { Home, Download, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import DesignerOrders from "./DesignerOrders"; // uses the provided DesignerOrders component
 
@@ -274,7 +274,12 @@ const DesignerAnalytics: React.FC = () => {
     <div className="min-h-screen bg-background">
       <header className="border-b">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Designer Analytics</h1>
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" onClick={() => navigate("/designer/dashboard")}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <h1 className="text-2xl font-bold">Designer Analytics</h1>
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={exportSummaryCSV}>
               <Download className="mr-2 h-4 w-4" /> Export Summary

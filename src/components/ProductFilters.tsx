@@ -22,13 +22,6 @@ interface ProductFiltersProps {
   onColorChange: (color: string) => void;
   sortBy: string;
   onSortChange: (value: string) => void;
-
-  /**
-   * 'immediate' - parent is updated as user changes slider/inputs (debounced)
-   * 'manual'    - user must press Apply to send changes to parent
-   *
-   * Default: 'immediate' (industry standard)
-   */
   applyMode?: "immediate" | "manual";
 }
 
@@ -49,16 +42,15 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
      Constants & presets
      ------------------------- */
   const SLIDER_MIN = 0;
-  const SLIDER_MAX = 5000;
+  const SLIDER_MAX = 10000; 
   const SLIDER_STEP = 50;
 
   const rangeOptions: Array<[number, number]> = [
-    [0, 500],
-    [500, 1000],
-    [1000, 2000],
-    [2000, 3000],
-    [3000, 4000],
-    [4000, 5000],
+    [0, 1000],
+    [1000, 3000],
+    [3000, 5000],
+    [5000, 7500],
+    [7500, 10000],
   ];
 
   const presets = useMemo(
@@ -72,26 +64,25 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
   );
 
   /* -------------------------
-     Local state (for controlled inputs)
+     Local state
      ------------------------- */
-  // localRange holds the "working" values while the user adjusts slider/inputs
   const [localRange, setLocalRange] = useState<[number, number]>(priceRange);
-  // dropdown state: either preset id or 'custom'
+  
   const getPresetId = (r: [number, number]) =>
     presets.find((p) => p.value[0] === r[0] && p.value[1] === r[1])?.id ?? "custom";
+    
   const [selectedPreset, setSelectedPreset] = useState<string>(getPresetId(priceRange));
 
-  // keep local state in sync if parent prop changes externally
   useEffect(() => {
     setLocalRange(priceRange);
     setSelectedPreset(getPresetId(priceRange));
-  }, [priceRange[0], priceRange[1]]); // update when parent changes
+  }, [priceRange[0], priceRange[1]]);
 
   /* -------------------------
-     Debounce logic for immediate mode
+     Debounce logic
      ------------------------- */
   const debounceRef = useRef<number | null>(null);
-  const DEBOUNCE_MS = 250;
+  const DEBOUNCE_MS = 500; // Slightly longer debounce for better typing experience
 
   function flushDebounce(range: [number, number]) {
     if (debounceRef.current) {
@@ -102,7 +93,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
   }
 
   function scheduleDebouncedUpdate(range: [number, number]) {
-    if (applyMode === "manual") return; // do nothing in manual mode
+    if (applyMode === "manual") return;
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
       debounceRef.current = null;
@@ -113,62 +104,51 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
   /* -------------------------
      Handlers
      ------------------------- */
-
-  // When user selects preset from dropdown
   function handlePresetSelect(id: string) {
     setSelectedPreset(id);
-    if (id === "custom") {
-      // keep current localRange
-      return;
-    }
+    if (id === "custom") return;
+    
     const preset = presets.find((p) => p.id === id);
     if (!preset) return;
     setLocalRange(preset.value);
-    // update parent immediately or debounced (depending on mode)
+    
     if (applyMode === "manual") return;
-    flushDebounce(preset.value); // immediate for UX consistency
+    flushDebounce(preset.value);
   }
 
-  // When slider changes
   function handleSliderChange(newVal: [number, number]) {
-    // enforce bounds & step rounding
-    const clamp = (v: number) =>
-      Math.max(SLIDER_MIN, Math.min(SLIDER_MAX, Math.round(v / SLIDER_STEP) * SLIDER_STEP));
-    const sanitized: [number, number] = [clamp(newVal[0]), clamp(newVal[1])];
-    // ensure min <= max
-    if (sanitized[0] > sanitized[1]) sanitized[0] = sanitized[1];
-
-    setLocalRange(sanitized);
-
-    // set preset if it matches one, otherwise 'custom'
-    setSelectedPreset(getPresetId(sanitized));
-
-    // update parent (immediate with debounce) unless manual mode
-    if (applyMode === "immediate") scheduleDebouncedUpdate(sanitized);
+    setLocalRange(newVal);
+    setSelectedPreset(getPresetId(newVal));
+    if (applyMode === "immediate") scheduleDebouncedUpdate(newVal);
   }
 
-  // Inputs editing (min / max)
+  // Improved Input Logic: Allows free typing, validates on change
   function handleMinInputChange(v: string) {
-    const num = Number(v.replace(/[^\d]/g, ""));
-    if (Number.isNaN(num)) return;
-    const newMin = Math.max(SLIDER_MIN, Math.min(SLIDER_MAX, Math.round(num / SLIDER_STEP) * SLIDER_STEP));
-    const updated: [number, number] = [Math.min(newMin, localRange[1]), localRange[1]];
+    const num = v === "" ? 0 : parseInt(v.replace(/[^\d]/g, ""), 10);
+    if (isNaN(num)) return;
+
+    // Constrain the value so it doesn't break logic, but don't force step-rounding while typing
+    const newMin = Math.min(Math.max(SLIDER_MIN, num), localRange[1]);
+    const updated: [number, number] = [newMin, localRange[1]];
+    
     setLocalRange(updated);
     setSelectedPreset(getPresetId(updated));
     if (applyMode === "immediate") scheduleDebouncedUpdate(updated);
   }
 
   function handleMaxInputChange(v: string) {
-    const num = Number(v.replace(/[^\d]/g, ""));
-    if (Number.isNaN(num)) return;
-    const newMax = Math.max(SLIDER_MIN, Math.min(SLIDER_MAX, Math.round(num / SLIDER_STEP) * SLIDER_STEP));
-    const updated: [number, number] = [localRange[0], Math.max(localRange[0], newMax)];
+    const num = v === "" ? 0 : parseInt(v.replace(/[^\d]/g, ""), 10);
+    if (isNaN(num)) return;
+
+    // Allow user to type up to SLIDER_MAX
+    const newMax = Math.min(num, SLIDER_MAX);
+    const updated: [number, number] = [localRange[0], newMax];
+    
     setLocalRange(updated);
     setSelectedPreset(getPresetId(updated));
     if (applyMode === "immediate") scheduleDebouncedUpdate(updated);
   }
 
-  // Manual Apply / Clear
   function handleApply() {
     flushDebounce(localRange);
     setSelectedPreset(getPresetId(localRange));
@@ -181,14 +161,8 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
     flushDebounce(reset);
   }
 
-  /* -------------------------
-     Small helpers for display
-     ------------------------- */
   const displayValue = (v: number) => `Rs ${v}`;
 
-  /* -------------------------
-     Component JSX
-     ------------------------- */
   return (
     <Card className="p-6 space-y-6 sticky top-24">
       {/* Sort */}
@@ -212,7 +186,6 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
       <div>
         <div className="flex items-center justify-between mb-3">
           <Label className="text-sm font-semibold">Price</Label>
-
           <div className="flex items-center space-x-2">
             <button
               type="button"
@@ -221,7 +194,6 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
             >
               Clear
             </button>
-
             {applyMode === "manual" && (
               <button
                 type="button"
@@ -246,35 +218,37 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
                   {p.label}
                 </SelectItem>
               ))}
-              <SelectItem value="custom">Custom: {displayValue(localRange[0])} - {displayValue(localRange[1])}</SelectItem>
+              <SelectItem value="custom">
+                Custom: {displayValue(localRange[0])} - {displayValue(localRange[1])}
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        {/* Numeric inputs (min / max) */}
+        {/* Numeric inputs - USER CAN TYPE HERE */}
         <div className="flex items-center gap-2 mb-3">
           <div className="flex-1">
             <Label className="text-xs">Min</Label>
             <input
               type="text"
               inputMode="numeric"
-              value={String(localRange[0])}
+              value={localRange[0] === 0 && localRange[0] !== priceRange[0] ? "" : localRange[0]}
               onChange={(e) => handleMinInputChange(e.target.value)}
-              className="w-full border rounded px-2 py-1 text-sm"
+              placeholder="0"
+              className="w-full border rounded px-2 py-1 text-sm focus:ring-2 focus:ring-primary outline-none"
               aria-label="Minimum price"
             />
           </div>
-
-          <div className="flex item-centre text-sm font-medium">—</div>
-
+          <div className="flex item-centre text-sm font-medium pt-5">—</div>
           <div className="flex-1">
             <Label className="text-xs">Max</Label>
             <input
               type="text"
               inputMode="numeric"
-              value={String(localRange[1])}
+              value={localRange[1] === 0 && localRange[1] !== priceRange[1] ? "" : localRange[1]}
               onChange={(e) => handleMaxInputChange(e.target.value)}
-              className="w-full border rounded px-2 py-1 text-sm"
+              placeholder="10000"
+              className="w-full border rounded px-2 py-1 text-sm focus:ring-2 focus:ring-primary outline-none"
               aria-label="Maximum price"
             />
           </div>
@@ -285,7 +259,6 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
           <div className="mb-2 text-xs text-muted-foreground">
             {displayValue(localRange[0])} — {displayValue(localRange[1])}
           </div>
-
           <Slider
             min={SLIDER_MIN}
             max={SLIDER_MAX}
@@ -332,7 +305,6 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
                 selectedColors.includes(color) ? "border-primary scale-110" : "border-border hover:scale-105"
               }`}
               style={{ backgroundColor: ((): string => {
-                // fallback mapping
                 const map: Record<string, string> = {
                   Black: "#000000",
                   White: "#FFFFFF",

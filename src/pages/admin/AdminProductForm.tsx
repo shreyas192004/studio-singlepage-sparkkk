@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Home, Upload, X } from "lucide-react";
+import { ArrowLeft, Home, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 const AdminProductForm = () => {
@@ -238,7 +238,12 @@ const AdminProductForm = () => {
       <header className="border-b">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold">{isEdit ? "Edit Product" : "Add Product"}</h1>
+            <div className="flex gap-5 items-center">
+              <Button variant="ghost" onClick={() => navigate("/admintesora/products")}>
+                  <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <h1 className="text-2xl font-bold">{isEdit ? "Edit Product" : "Add Product"}</h1>
+            </div>
             <Link to="/admintesora/dashboard">
               <Button variant="outline">
                 <Home className="mr-2 h-4 w-4" />

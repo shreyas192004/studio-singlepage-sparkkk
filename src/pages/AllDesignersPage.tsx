@@ -40,6 +40,7 @@ const AllDesignersPage = () => {
       const { data, error } = await supabase
         .from("designers")
         .select("*")
+        .eq("featured", true)
         .order("created_at", { ascending: false });
 
       if (error) throw error;

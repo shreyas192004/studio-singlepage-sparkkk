@@ -1,7 +1,7 @@
+// src/contexts/AdminContext.tsx
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
 
 interface AdminContextType {
   user: User | null;
@@ -22,14 +22,13 @@ export const AdminProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Set up auth state listener
+    // Auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          // Check admin role without fetching inside callback
           setTimeout(async () => {
             const { data } = await (supabase as any)
               .from("user_roles")
@@ -47,7 +46,7 @@ export const AdminProvider = ({ children }: { children: ReactNode }) => {
       }
     );
 
-    // Check for existing session
+    // Check existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -85,8 +84,8 @@ export const AdminProvider = ({ children }: { children: ReactNode }) => {
       email,
       password,
       options: {
-        emailRedirectTo: redirectUrl
-      }
+        emailRedirectTo: redirectUrl,
+      },
     });
     return { error };
   };

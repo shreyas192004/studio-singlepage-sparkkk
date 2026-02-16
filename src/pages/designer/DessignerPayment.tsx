@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useDesigner } from "@/contexts/DesignerContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Download, IndianRupee, ArrowLeft } from "lucide-react";
+import { Download, IndianRupee, ArrowLeft, Home } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -24,6 +24,8 @@ interface PaymentRecord {
   payment_method: string;
   transaction_id: string;
   notes: string | null;
+  payout_week_start: string | null;
+  payout_week_end: string | null;
 }
 
 interface ProductSale {
@@ -31,7 +33,7 @@ interface ProductSale {
   title: string;
   price: number;
   totalSold: number;
-  revenue: number;
+  revenue: number; // non-cancelled
 }
 
 const DesignerPayment: React.FC = () => {
@@ -43,6 +45,8 @@ const DesignerPayment: React.FC = () => {
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
+  const [totalRevenue, setTotalRevenue] = useState(0);
+  const [pendingAmount, setPendingAmount] = useState(0);
 
   useEffect(() => {
     if (!loading && !isDesigner) navigate("/designer/login");
@@ -75,27 +79,47 @@ const DesignerPayment: React.FC = () => {
 
       setDesignerId(designerData.id);
 
-      // Fetch products for designer
+      // Products
       const { data: productsData } = await supabase
         .from("products")
         .select("id, title, price")
         .eq("designer_id", designerData.id)
         .order("created_at", { ascending: false });
 
-      // Fetch order items for these products to calculate sales
-      const productIds = productsData?.map(p => p.id) || [];
+      const productIds = productsData?.map((p) => p.id) || [];
       let productSales: ProductSale[] = [];
+      let totalNonCancelledRevenue = 0;
+      let unpaidPendingCompleted = 0;
 
       if (productIds.length > 0) {
         const { data: orderItems } = await supabase
           .from("order_items")
-          .select("product_id, quantity, total_price")
+          .select(
+            "product_id, quantity, total_price, status, designer_payout_status"
+          )
           .in("product_id", productIds);
 
-        productSales = (productsData || []).map(product => {
-          const items = (orderItems || []).filter(item => item.product_id === product.id);
-          const totalSold = items.reduce((sum, item) => sum + item.quantity, 0);
-          const revenue = items.reduce((sum, item) => sum + Number(item.total_price), 0);
+        const allItems = orderItems || [];
+
+        productSales = (productsData || []).map((product) => {
+          const itemsForProduct = allItems.filter(
+            (item: any) => item.product_id === product.id
+          );
+
+          const nonCancelledItemsForProduct = itemsForProduct.filter(
+            (item: any) => item.status !== "cancelled"
+          );
+
+          const totalSold = nonCancelledItemsForProduct.reduce(
+            (sum: number, item: any) => sum + item.quantity,
+            0
+          );
+
+          const revenue = nonCancelledItemsForProduct.reduce(
+            (sum: number, item: any) => sum + Number(item.total_price),
+            0
+          );
+
           return {
             id: product.id,
             title: product.title,
@@ -104,21 +128,43 @@ const DesignerPayment: React.FC = () => {
             revenue,
           };
         });
+
+        totalNonCancelledRevenue = (allItems || [])
+          .filter((item: any) => item.status !== "cancelled")
+          .reduce(
+            (sum: number, item: any) => sum + Number(item.total_price),
+            0
+          );
+
+        unpaidPendingCompleted = (allItems || [])
+          .filter(
+            (item: any) =>
+              (item.status === "pending" || item.status === "completed") &&
+              item.designer_payout_status === "unpaid"
+          )
+          .reduce(
+            (sum: number, item: any) => sum + Number(item.total_price),
+            0
+          );
       }
 
       setProducts(productSales);
+      setTotalRevenue(totalNonCancelledRevenue);
+      setPendingAmount(unpaidPendingCompleted);
 
-      // Fetch payments from designer_payments table
+      // Payments
       const { data: paymentsData, error: paymentsError } = await supabase
         .from("designer_payments")
-        .select("id, amount, payment_date, payment_method, transaction_id, notes")
+        .select(
+          "id, amount, payment_date, payment_method, transaction_id, notes, payout_week_start, payout_week_end"
+        )
         .eq("designer_id", designerData.id)
         .order("payment_date", { ascending: false });
 
       if (paymentsError) {
         console.error("Error fetching payments:", paymentsError);
       } else {
-        setPayments(paymentsData || []);
+        setPayments((paymentsData || []) as PaymentRecord[]);
       }
     } catch (err) {
       console.error("DesignerPayment init error:", err);
@@ -127,15 +173,30 @@ const DesignerPayment: React.FC = () => {
     }
   };
 
-  // Calculate totals
-  const totalRevenue = products.reduce((sum, p) => sum + p.revenue, 0);
-  const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
-  const pendingAmount = Math.max(0, totalRevenue - totalPaid);
+  const totalPaid = payments.reduce(
+    (sum, p) => sum + Number(p.amount),
+    0
+  );
 
   const exportPaymentsCSV = () => {
+    if (payments.length === 0) {
+      toast.error("No payment data to export");
+      return;
+    }
+
     const csvRows = [
-      ["Date", "Amount", "Payment Method", "Transaction ID", "Notes"],
+      [
+        "Week Start",
+        "Week End",
+        "Payment Date",
+        "Amount",
+        "Payment Method",
+        "Transaction ID",
+        "Notes",
+      ],
       ...payments.map((p) => [
+        p.payout_week_start || "",
+        p.payout_week_end || "",
         format(new Date(p.payment_date), "yyyy-MM-dd"),
         p.amount,
         p.payment_method,
@@ -150,13 +211,20 @@ const DesignerPayment: React.FC = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `designer-payments-${new Date().toISOString().split("T")[0]}.csv`;
+    a.download = `designer-payments-${
+      new Date().toISOString().split("T")[0]
+    }.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
     toast.success("Exported payments CSV");
   };
 
-  if (loading || isLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (loading || isLoading)
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        Loading...
+      </div>
+    );
   if (!isDesigner) return null;
 
   return (
@@ -164,13 +232,27 @@ const DesignerPayment: React.FC = () => {
       <header className="border-b">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/designer/dashboard")}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/designer/dashboard")}
+            >
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <h1 className="text-2xl font-bold">My Payments</h1>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={exportPaymentsCSV} disabled={payments.length === 0}>
+            <Link to="/designer/dashboard">
+                <Button variant="outline">
+                  <Home className="mr-2 h-4 w-4" />
+                  Dashboard
+                </Button>
+              </Link>
+            <Button
+              variant="outline"
+              onClick={exportPaymentsCSV}
+              disabled={payments.length === 0}
+            >
               <Download className="mr-2 h-4 w-4" /> Export CSV
             </Button>
           </div>
@@ -178,18 +260,20 @@ const DesignerPayment: React.FC = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8 space-y-6">
-        {/* Summary Cards */}
+        {/* Summary cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Total Revenue</CardTitle>
+              <CardTitle>Total Revenue (Non-cancelled)</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold flex items-center gap-1">
                 <IndianRupee className="h-6 w-6" />
                 {totalRevenue.toLocaleString()}
               </div>
-              <div className="text-sm text-muted-foreground">From product sales</div>
+              <div className="text-sm text-muted-foreground">
+                From all non-cancelled orders
+              </div>
             </CardContent>
           </Card>
 
@@ -202,7 +286,9 @@ const DesignerPayment: React.FC = () => {
                 <IndianRupee className="h-6 w-6" />
                 {totalPaid.toLocaleString()}
               </div>
-              <div className="text-sm text-muted-foreground">Payments received</div>
+              <div className="text-sm text-muted-foreground">
+                Weekly payouts received
+              </div>
             </CardContent>
           </Card>
 
@@ -212,17 +298,23 @@ const DesignerPayment: React.FC = () => {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold flex items-center gap-1">
-                <Badge variant={pendingAmount > 0 ? "destructive" : "secondary"} className="text-xl px-3 py-1">
+                <Badge
+                  variant={pendingAmount > 0 ? "destructive" : "secondary"}
+                  className="text-xl px-3 py-1"
+                >
                   <IndianRupee className="h-5 w-5 mr-1" />
                   {pendingAmount.toLocaleString()}
                 </Badge>
               </div>
-              <div className="text-sm text-muted-foreground">Yet to be paid</div>
+              <div className="text-sm text-muted-foreground">
+                Unpaid items with status <code>pending</code> or{" "}
+                <code>completed</code> (cancelled ignored)
+              </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Products Sales Table */}
+        {/* Product sales */}
         <Card>
           <CardHeader>
             <CardTitle>Product Sales</CardTitle>
@@ -239,15 +331,21 @@ const DesignerPayment: React.FC = () => {
                     <TableHead>Product</TableHead>
                     <TableHead className="text-right">Price</TableHead>
                     <TableHead className="text-right">Units Sold</TableHead>
-                    <TableHead className="text-right">Revenue</TableHead>
+                    <TableHead className="text-right">
+                      Revenue (Non-cancelled)
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {products.map((p) => (
                     <TableRow key={p.id}>
                       <TableCell className="font-medium">{p.title}</TableCell>
-                      <TableCell className="text-right">₹{p.price.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">{p.totalSold}</TableCell>
+                      <TableCell className="text-right">
+                        ₹{p.price.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {p.totalSold}
+                      </TableCell>
                       <TableCell className="text-right text-green-600 font-medium">
                         ₹{p.revenue.toLocaleString()}
                       </TableCell>
@@ -259,18 +357,18 @@ const DesignerPayment: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Toggle Payment History */}
+        {/* Toggle history */}
         <div className="flex justify-end">
           <Button onClick={() => setShowHistory((s) => !s)}>
             {showHistory ? "Hide Payment History" : "View Payment History"}
           </Button>
         </div>
 
-        {/* Payment History Table */}
+        {/* Payment history */}
         {showHistory && (
           <Card>
             <CardHeader>
-              <CardTitle>Payment History</CardTitle>
+              <CardTitle>Payment History (Week-wise)</CardTitle>
             </CardHeader>
             <CardContent>
               {payments.length === 0 ? (
@@ -281,6 +379,7 @@ const DesignerPayment: React.FC = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Payout Week</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
                       <TableHead>Payment Method</TableHead>
@@ -289,22 +388,44 @@ const DesignerPayment: React.FC = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {payments.map((payment) => (
-                      <TableRow key={payment.id}>
-                        <TableCell>
-                          {format(new Date(payment.payment_date), "dd MMM yyyy")}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <span className="flex items-center justify-end gap-1 text-green-600 font-medium">
-                            <IndianRupee className="h-3 w-3" />
-                            {Number(payment.amount).toLocaleString()}
-                          </span>
-                        </TableCell>
-                        <TableCell>{payment.payment_method}</TableCell>
-                        <TableCell className="font-mono text-sm">{payment.transaction_id}</TableCell>
-                        <TableCell className="text-muted-foreground">{payment.notes || "-"}</TableCell>
-                      </TableRow>
-                    ))}
+                    {payments.map((payment) => {
+                      const weekLabel =
+                        payment.payout_week_start &&
+                        payment.payout_week_end
+                          ? `${format(
+                              new Date(payment.payout_week_start),
+                              "dd MMM"
+                            )} - ${format(
+                              new Date(payment.payout_week_end),
+                              "dd MMM yyyy"
+                            )}`
+                          : "—";
+
+                      return (
+                        <TableRow key={payment.id}>
+                          <TableCell>{weekLabel}</TableCell>
+                          <TableCell>
+                            {format(
+                              new Date(payment.payment_date),
+                              "dd MMM yyyy"
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className="flex items-center justify-end gap-1 text-green-600 font-medium">
+                              <IndianRupee className="h-3 w-3" />
+                              {Number(payment.amount).toLocaleString()}
+                            </span>
+                          </TableCell>
+                          <TableCell>{payment.payment_method}</TableCell>
+                          <TableCell className="font-mono text-sm">
+                            {payment.transaction_id}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {payment.notes || "-"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}

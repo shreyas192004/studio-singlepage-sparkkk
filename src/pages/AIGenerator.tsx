@@ -13,7 +13,11 @@ import {
   Eye,
   SlidersHorizontal,
   LogOut,
+  Code2,
+  CloudLightning,
+  Download,
 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -172,7 +176,7 @@ function GenerationLimitModal({
   generationCount: number;
   limit: number;
 }) {
-  const navigate = useNavigate(); // ⚡ Add nav
+  const navigate = useNavigate();
 
   return (
     <PortalModal open={open} onClose={onClose} label="generation-limit">
@@ -198,7 +202,7 @@ function GenerationLimitModal({
             className="flex-1 bg-sale-blue"
             onClick={() => {
               onClose();
-              navigate("/"); // Redirect to shop/cart/checkout page
+              navigate("/");
             }}
           >
             Place Order
@@ -213,18 +217,30 @@ function GenerationLimitModal({
   );
 }
 
+/* ---------- types, base images, prices ---------- */
+type ClothingType =
+  | "t-shirt"
+  // | "polo"
+  | "hoodie"
+  // | "pullover"
+  | "oversized-tshirt"
+  | "sweatshirt";
 
-/* ---------- your AIGenerator component (most code kept intact) ---------- */
-type ClothingType = "t-shirt" | "polo" | "hoodie" | "tops";
 type ImagePosition = "front" | "back";
 
 const BASE_IMAGES: Record<string, { front?: string; back?: string }> = {
   "t-shirt": { front: "/t-shirtFront.jpg", back: "/t-shirtBack.jpg" },
   hoodie: { front: "/hoodieFront.jpg", back: "/hoodieBack.jpg" },
-  polo: { front: "/poloBack.jpg", back: "/poloBack.jpg" },
-  tops: { front: "/topFront.jpg", back: "/topFront.jpg" },
+  // polo: { front: "/poloBack.jpg", back: "/poloBack.jpg" },
+  // tops: { front: "/topFront.jpg", back: "/topFront.jpg" },
+  "oversized-tshirt": { front: "/t-shirtFront.jpg", back: "/t-shirtBack.jpg" }, // Using t-shirt images as fallback
+  sweatshirt: { front: "/sweatshirtFront.png", back: "/sweatshirtBack.png" },
 };
 
+// 🎯 Unified centered positioning for all apparel types
+// widthPct: 35 for all (consistent design size)
+// leftPct: 32-33 (horizontally centered)
+// topPct: 32-35 (vertically centered on chest area)
 const OVERLAY_PRESETS: Record<
   string,
   {
@@ -233,20 +249,40 @@ const OVERLAY_PRESETS: Record<
   }
 > = {
   "t-shirt": {
-    front: { widthPct: 40, leftPct: 32, topPct: 30 },
-    back: { widthPct: 40, leftPct: 30, topPct: 30 },
+    front: { widthPct: 35, leftPct: 32, topPct: 32 },
+    back: { widthPct: 35, leftPct: 32, topPct: 32 },
   },
   hoodie: {
-    front: { widthPct: 30, leftPct: 35, topPct: 40 },
-    back: { widthPct: 30, leftPct: 35, topPct: 40 },
+    front: { widthPct: 35, leftPct: 32, topPct: 35 },
+    back: { widthPct: 35, leftPct: 32, topPct: 35 },
   },
-  polo: {
-    back: { widthPct: 30, leftPct: 35, topPct: 35, rotate: 0 },
+  // polo: {
+  //   back: { widthPct: 35, leftPct: 32, topPct: 33, rotate: 0 },
+  // },
+  "oversized-tshirt": {
+    front: { widthPct: 35, leftPct: 32, topPct: 32 },
+    back: { widthPct: 35, leftPct: 32, topPct: 32 },
+  },
+  sweatshirt: {
+    front: { widthPct: 35, leftPct: 32, topPct: 35 },
+    back: { widthPct: 35, leftPct: 32, topPct: 35 },
   },
   tops: {
-    front: { widthPct: 25, leftPct: 37, topPct: 43 },
+    front: { widthPct: 35, leftPct: 32, topPct: 40 },
   },
+
 };
+
+// 💰 Clothing prices per type
+const CLOTHING_PRICES: Record<ClothingType, number> = {
+  "t-shirt": 799,
+  hoodie: 1499,
+  // polo: 999,
+  // pullover: 1299,
+  "oversized-tshirt": 999,
+  sweatshirt: 1299,
+};
+
 
 export default function AIGenerator() {
   const [searchParams] = useSearchParams();
@@ -266,13 +302,13 @@ export default function AIGenerator() {
   const [designText, setDesignText] = useState("");
   const [designRecord, setDesignRecord] = useState<any | null>(null);
 
-  const [showSurvey, setShowSurvey] = useState(false);
-  const [surveyCompleted, setSurveyCompleted] = useState(false);
-  const [surveyData, setSurveyData] = useState({
-    preferredStyle: "",
-    preferredColorScheme: "",
-    preferredClothingType: "",
-  });
+  // const [showSurvey, setShowSurvey] = useState(false);
+  // const [surveyCompleted, setSurveyCompleted] = useState(false);
+  // const [surveyData, setSurveyData] = useState({
+  //   preferredStyle: "",
+  //   preferredColorScheme: "",
+  //   preferredClothingType: "",
+  // });
 
   const [clothingType, setClothingType] = useState<ClothingType>("t-shirt");
   const [imagePosition, setImagePosition] = useState<ImagePosition>("front");
@@ -282,18 +318,30 @@ export default function AIGenerator() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
 
-  // const [userHasPurchased, setUserHasPurchased] = useState(false);
   const { user, signOut } = useAuth();
 
   // Variant modal state
   const [variantModalOpen, setVariantModalOpen] = useState(false);
   const [variantAction, setVariantAction] = useState<"cart" | "wishlist" | null>(null);
-  const [availableSizes] = useState(["XS", "S", "M", "L", "XL", "XXL"]);
+  // const [availableSizes] = useState(["XS", "S", "M", "L", "XL", "XXL"]);
   const [availableColors] = useState(["Black", "White", "Navy Blue", "Pastel Pink"]);
   const [selectedSize, setSelectedSize] = useState<string | null>("M");
   const [selectedColor, setSelectedColor] = useState<string | null>("Black");
+  const [customNote, setCustomNote] = useState("");
+
+  type SizeCategory = "Men" | "Women" | "Kids";
+
+  const sizeMap: Record<SizeCategory, string[]> = {
+    Men: ["S", "M", "L", "XL", "XXL"],
+    Women: ["XS", "S", "M", "L", "XL"],
+    Kids: ["XS", "S"],
+  };
+
+  const [sizeCategory, setSizeCategory] = useState<SizeCategory>("Men");
 
   const navigate = useNavigate();
+
+  const currentPrice = CLOTHING_PRICES[clothingType];
 
   const handleLogout = async () => {
     await signOut();
@@ -308,10 +356,7 @@ export default function AIGenerator() {
     const savedCount = localStorage.getItem("generation_count");
     if (savedCount) setGenerationCount(parseInt(savedCount, 10));
 
-    const surveyDone = localStorage.getItem("survey_completed");
-    if (surveyDone === "true") setSurveyCompleted(true);
 
-    // Check if user has purchased before (to reset generation limit)
     const checkUserStats = async () => {
       if (user) {
         try {
@@ -319,13 +364,11 @@ export default function AIGenerator() {
             .from("user_generation_stats")
             .select("*")
             .eq("user_id", user.id)
-            .single();
+            .maybeSingle();
 
           if (!error && data) {
             setGenerationCount(data.generation_count);
-            // setUserHasPurchased(data.has_purchased);
           } else {
-            // Create user stats if not exists (best effort)
             await supabase.from("user_generation_stats").insert({
               user_id: user.id,
               generation_count: 0,
@@ -347,10 +390,8 @@ export default function AIGenerator() {
     else {
       if (!["front", "back"].includes(imagePosition)) setImagePosition("front");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clothingType]);
+  }, [clothingType, imagePosition]);
 
-  // Close modal on Esc for the large preview only (we handle inline modals separately)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setShowLargeModal(false);
@@ -359,7 +400,6 @@ export default function AIGenerator() {
     return () => window.removeEventListener("keydown", onKey);
   }, [showLargeModal]);
 
-  // ---------- handleGenerate with early controlled modal opens ----------
   const handleGenerate = async () => {
     if (isGenerating) return;
 
@@ -368,136 +408,156 @@ export default function AIGenerator() {
       return;
     }
 
-    if (generationCount >= AUTHENTICATED_USER_LIMIT ) {
+    if (generationCount >= AUTHENTICATED_USER_LIMIT) {
       setShowLimitModal(true);
       return;
     }
 
     const trimmedPrompt = prompt.trim();
+    const trimmedText = designText.trim();
+
     if (!trimmedPrompt) {
       toast.error("Please enter a design description");
       return;
     }
+
     if (trimmedPrompt.length < 10) {
       toast.error("Prompt must be at least 10 characters");
       return;
     }
+
     if (trimmedPrompt.length > 500) {
       toast.error("Prompt must be under 500 characters");
       return;
     }
+
+    // Validation removed for size/color as they are selected after generation
+
 
     setIsGenerating(true);
     setGeneratedImage(null);
     setDesignRecord(null);
 
     try {
-      const sessionId = user?.id || `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // 🔒 NORMALIZE VALUES TO MATCH BACKEND ZOD
+      // 🔒 MAP FRONTEND TYPES TO BACKEND SUPPORTED TYPES
+      const safeClothingTypeMap: Record<string, string> = {
+        "t-shirt": "t-shirt",
+        "polo": "polo",
+        "hoodie": "hoodie",
+        "sweatshirt": "sweatshirt",
 
-      const body: Record<string, any> = {
-        prompt: trimmedPrompt,
-        style,
-        colorScheme,
-        aspectRatio,
-        quality,
-        creativity,
-        clothingType,
-        imagePosition,
+        // 👇 MAP UNSUPPORTED TO CLOSEST MATCH
+        "pullover": "sweatshirt",
+        "oversized-tshirt": "t-shirt",
+        "tops": "tops",
       };
 
-      const trimmedText = designText.trim();
-      if (trimmedText.length > 0) body.text = trimmedText;
+      const safeClothingType =
+        safeClothingTypeMap[clothingType] || "t-shirt";
+
+
+      const safeImagePosition = imagePosition === "back" ? "back" : "front";
+
+      const safeStyle = [
+        "modern", "vintage", "minimalist", "abstract", "retro",
+        "graffiti", "anime", "geometric", "organic", "grunge", "realistic"
+      ].includes(style)
+        ? style
+        : "realistic";
+
+      const safeColorScheme = [
+        "normal", "vibrant", "pastel", "monochrome", "neon",
+        "earth-tones", "black-white", "cool", "warm", "gradient"
+      ].includes(colorScheme)
+        ? colorScheme
+        : "normal";
+
+      console.log("SAFE PAYLOAD:", {
+        prompt: trimmedPrompt,
+        style: safeStyle,
+        colorScheme: safeColorScheme,
+        quality,
+        creativity,
+        clothingType: safeClothingType,
+        imagePosition: safeImagePosition,
+        color: selectedColor,
+        text: trimmedText,
+      });
 
       const { data, error } = await lovableSupabase.functions.invoke(
         "generate-tshirt-design",
-        { body }
+        {
+          body: {
+            prompt: trimmedPrompt,
+            style: safeStyle,
+            colorScheme: safeColorScheme,
+            quality,
+            creativity,
+            clothingType: safeClothingType,
+            imagePosition: safeImagePosition,
+            color: selectedColor?.toLowerCase() || "black",
+            text: trimmedText || undefined,
+          },
+        }
       );
 
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      if (!data?.imageUrl) throw new Error("No image in response");
+      if (!data?.imageUrl) throw new Error("No image returned from AI");
 
       setGeneratedImage(data.imageUrl);
 
-      const insertResp = await (supabase as any)
+      // ---------------------------------------------------------
+      // 💾 CLIENT-SIDE PERSISTENCE (Bypass Edge Function DB insert)
+      // ---------------------------------------------------------
+      const { data: insertedRecord, error: insertError } = await supabase
         .from("ai_generations")
         .insert({
-          user_id: user?.id || null,
-          session_id: sessionId,
+          user_id: user.id,
+          session_id: crypto.randomUUID(), // tracking session
           image_url: data.imageUrl,
           prompt: trimmedPrompt,
-          style,
-          color_scheme: colorScheme,
-          clothing_type: clothingType,
-          image_position: imagePosition,
-          included_text: data?.includedText ?? null,
+          style: safeStyle,
+          color_scheme: safeColorScheme,
+          clothing_type: safeClothingType,
+          image_position: safeImagePosition,
+          included_text: trimmedText || null,
         })
-        .select("*")
+        .select()
         .single();
 
-      if (!insertResp.error) setDesignRecord(insertResp.data);
-
-      toast.success("Design generated successfully!");
-
-      if (data?.includedText) toast.success(`Text "${data.includedText}" included in design!`);
+      if (insertError) {
+        console.error("Failed to save generation to DB:", insertError);
+        toast.error("Image generated but failed to save to history.");
+      } else {
+        console.log("Design saved to DB:", insertedRecord);
+        setDesignRecord(insertedRecord);
+        toast.success("Design generated and saved!");
+      }
 
       const newCount = generationCount + 1;
       setGenerationCount(newCount);
 
       if (user) {
-        try {
-          await supabase
-            .from("user_generation_stats")
-            .upsert(
-              {
-                user_id: user.id,
-                generation_count: newCount,
-              } as any,
-              { onConflict: "user_id" }
-            );
-        } catch (err) {
-          console.error("Error updating generation count:", err);
-        }
+        await supabase
+          .from("user_generation_stats")
+          .upsert(
+            { user_id: user.id, generation_count: newCount } as any,
+            { onConflict: "user_id" }
+          );
       } else {
         localStorage.setItem("generation_count", newCount.toString());
       }
 
-      const surveyAlreadyCompleted = localStorage.getItem("survey_completed") === "true";
-      if (!surveyAlreadyCompleted && newCount === 1) setTimeout(() => setShowSurvey(true), 1200);
-
       setDesignText("");
     } catch (err: any) {
       console.error("Generation error:", err);
-
-      let message = "Failed to generate design. Please try again.";
-
-      const rawBody = err?.context?.body ?? err?.body;
-      if (rawBody) {
-        try {
-          const parsed = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
-          if (parsed?.details && Array.isArray(parsed.details)) {
-            const detailMsgs = parsed.details.map((d: any) => d?.message || JSON.stringify(d));
-            message = detailMsgs.join("; ");
-          } else if (parsed?.error) message = parsed.error;
-        } catch (parseErr) {
-          console.error("Failed to parse error body:", parseErr);
-        }
-      }
-
-      const status = err?.context?.status ?? err?.status;
-      if (status === 402) message = "Payment required, please add funds to your AI workspace.";
-      if (status === 429) message = "Rate limits exceeded, please try again shortly.";
-
-      toast.error(message);
+      toast.error(err?.message || "Failed to generate design");
     } finally {
       setIsGenerating(false);
     }
   };
 
-  /* ---------- rest of your helpers & UI (upload/create product, handlers, preview component, etc) ---------- */
-  // For brevity I keep the unchanged functions & UI identical to your previous file.
-  // Paste your previously provided helper functions (uploadImageToStorage, createProductFromDesign, handleAddToCart, handleAddToWishlist, handleConfirmVariant, handleBuy)
-  // ... (I'll paste them verbatim to keep behaviour identical)
 
   // -------------------
   // Helpers for saving design -> product
@@ -548,8 +608,10 @@ export default function AIGenerator() {
 
       const sku = `AI-${Date.now()}`;
       const title = payload.title ?? `AI Generated Design`;
-      const description = payload.description ?? `AI-generated design. Prompt: ${prompt.slice(0, 120)}`;
-      const price = payload.price ?? 1999;
+      const description =
+        payload.description ??
+        `AI-generated design. Prompt: ${prompt.slice(0, 120)}`;
+      const price = payload.price ?? currentPrice;
       const images = [publicUrl];
 
       const productInsertRow: any = {
@@ -616,16 +678,6 @@ export default function AIGenerator() {
     setVariantModalOpen(true);
   };
 
-  const handleAddToWishlist = async () => {
-    if (!generatedImage) return toast.error("No design to add to wishlist");
-    if (!user) {
-      setShowLoginModal(true);
-      return;
-    }
-
-    setVariantAction("wishlist");
-    setVariantModalOpen(true);
-  };
 
   const handleConfirmVariant = async () => {
     if (!generatedImage) return toast.error("No design to save");
@@ -638,15 +690,19 @@ export default function AIGenerator() {
     const payload = {
       title: `AI Design — ${prompt.slice(0, 30)}`,
       description: `AI design | Prompt: ${prompt}`,
-      price: 1999,
+      price: currentPrice,
       ai_generation_id: designRecord?.id ?? null,
       selected_size: selectedSize,
       selected_color: selectedColor,
+      note: customNote, // Pass note to payload if needed by referenced function
     };
 
     try {
       toast.loading("Saving design and creating product...");
-      const { product } = await createProductFromDesign(generatedImage, payload as any);
+      const { product } = await createProductFromDesign(
+        generatedImage,
+        payload as any
+      );
 
       if (variantAction === "cart") {
         addToCart({
@@ -659,6 +715,7 @@ export default function AIGenerator() {
           color: selectedColor,
           clothing_type: clothingType,
           is_ai_generated: true,
+          note: customNote,
         } as any);
         toast.success("Added custom design to cart");
       } else if (variantAction === "wishlist") {
@@ -678,6 +735,7 @@ export default function AIGenerator() {
       setVariantAction(null);
       setSelectedSize("M");
       setSelectedColor("Black");
+      setCustomNote("");
     }
   };
 
@@ -695,6 +753,7 @@ export default function AIGenerator() {
       colorScheme,
       clothingType,
       imagePosition,
+      price: currentPrice,
       ai_generation_id: designRecord?.id ?? null,
     };
     sessionStorage.setItem("ai_design_data", JSON.stringify(designData));
@@ -707,7 +766,7 @@ export default function AIGenerator() {
     });
   };
 
-  /* ---------- UI rendering (kept the same structure as your file) ---------- */
+  /* ---------- preview helpers ---------- */
   const baseImageSrc = (() => {
     const mapping = BASE_IMAGES[clothingType];
     if (!mapping) return "/t-shirtFront.jpg";
@@ -716,88 +775,158 @@ export default function AIGenerator() {
 
   const overlayPreset =
     OVERLAY_PRESETS[clothingType]?.[imagePosition] ??
-    OVERLAY_PRESETS[clothingType]?.front ?? { widthPct: 55, leftPct: 22, topPct: 20 };
+    OVERLAY_PRESETS[clothingType]?.front ?? {
+      widthPct: 55,
+      leftPct: 22,
+      topPct: 20,
+    };
 
-  const MockupPreview = () => (
-    <div className="bg-card rounded-2xl p-6 shadow-sm border border-border sticky top-24 relative">
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <div>
-          <h2 className="text-lg font-semibold">Design Preview</h2>
-          <div className="text-sm text-muted-foreground">Live mockup of your design</div>
-        </div>
-        {generatedImage && (
-          <Button onClick={() => setShowLargeModal(true)} variant="ghost" size="sm" className="flex items-center gap-2">
-            <Eye className="w-4 h-4" />
-            <span className="hidden sm:inline text-sm">Preview</span>
-          </Button>
-        )}
-      </div>
+  //   const MockupPreview = () => (
+  //     <div
+  //       className="
+  //       bg-card rounded-2xl p-4 shadow-md border border-border
 
-      <div className="relative w-full rounded-lg overflow-hidden bg-muted" style={{ paddingTop: "100%" }}>
-        <img src={baseImageSrc} alt={`${clothingType} mockup ${imagePosition}`} className="absolute inset-0 w-full h-full object-cover" draggable={false} />
+  //       /* 📱 Mobile: fixed under header */
+  //       fixed top-[64px] left-0 right-0 mx-auto
+  //       w-[94vw] max-w-[420px]
+  //       z-30
 
-        {generatedImage ? (
-          <img
-            src={generatedImage}
-            alt="generated design overlay"
-            className="absolute cursor-pointer transition-transform duration-150 hover:scale-105"
-            style={{
-              width: `${overlayPreset.widthPct}%`,
-              left: `${overlayPreset.leftPct}%`,
-              top: `${overlayPreset.topPct}%`,
-              transform: `rotate(${overlayPreset.rotate ?? 0}deg)`,
-              objectFit: "contain",
-            }}
-            draggable={false}
-            crossOrigin="anonymous"
-            onClick={() => setShowLargeModal(true)}
-          />
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground p-6">
-            <Sparkles className="w-12 h-12 mb-3 opacity-60" />
-            <p className="text-center">
-              Describe your idea and hit <span className="font-semibold">Generate</span>
-            </p>
-          </div>
-        )}
-      </div>
+  //       /* 💻 Desktop: sticky sidebar */
+  //       lg:static
+  //       lg:sticky lg:top-24
+  //       lg:w-full
+  //       lg:max-w-none
+  //       lg:z-auto
+  //     "
+  //     >
 
-      {generatedImage && (
-        <div className="mt-4 flex items-center gap-3">
-          <button onClick={handleAddToWishlist} className="p-2 rounded-md hover:bg-muted/60 transition" aria-label="Add to wishlist">
-            <Heart className="w-5 h-5 text-muted-foreground" />
-          </button>
 
-          <Button onClick={handleAddToCart} variant="outline" size="sm" className="flex items-center gap-2">
-            <ShoppingCart className="w-4 h-4" />
-            <span className="sr-only">Add to cart</span>
-          </Button>
 
-          <Button onClick={handleBuy} className="ml-auto bg-sale-blue hover:bg-sale-blue/95 text-white font-semibold py-2 px-4">
-            Buy
-          </Button>
 
-          <Button variant="ghost" size="sm" onClick={handleGenerate} className="text-muted-foreground">
-            Regenerate
-          </Button>
-        </div>
-      )}
+  //       <div className="flex items-start justify-between gap-4 mb-4">
+  //         <div>
+  //           <h2 className="text-lg font-semibold">Design Preview</h2>
+  //           <div className="text-sm text-muted-foreground">
+  //             See How Your Design Looks
+  //           </div>
+  //         </div>
+  //         {generatedImage && (
+  //           <Button
+  //             onClick={() => setShowLargeModal(true)}
+  //             variant="ghost"
+  //             size="sm"
+  //             className="flex items-center gap-2"
+  //           >
+  //             <Eye className="w-4 h-4" />
+  //             <span className="hidden sm:inline text-sm">Preview</span>
+  //           </Button>
+  //         )}
+  //       </div>
 
-      {!user && generationCount > 0 && (
-        <div className="mt-4 text-center text-sm text-muted-foreground">
-          {generationCount}/{FREE_USER_LIMIT} free generations used
-        </div>
-      )}
-    </div>
-  );
+  //       <div
+  //   className="
+  //     relative
+  //     w-full
+  //     min-h-[600px]
+  //     h-full
+  //     rounded-[2.5rem]
+  //     border
+  //     border-muted-foreground/10
+  //     bg-white
+  //     dark:bg-muted/5
+  //     shadow-2xl
+  //     shadow-black/[0.02]
+  //     overflow-hidden
+  //     flex
+  //     items-center
+  //     justify-center
+  //     p-6
+  //   "
+  // >
+
+  //         <img
+  //           src={baseImageSrc}
+  //           alt={`${clothingType} mockup ${imagePosition}`}
+  //           className="absolute inset-0 w-full h-full object-cover"
+  //           draggable={false}
+  //         />
+
+  //         {generatedImage ? (
+  //           <img
+  //             src={generatedImage}
+  //             alt="generated design overlay"
+  //             className="absolute cursor-pointer transition-transform duration-150 hover:scale-105"
+  //             style={{
+  //               width: `${overlayPreset.widthPct}%`,
+  //               left: `${overlayPreset.leftPct}%`,
+  //               top: `${overlayPreset.topPct}%`,
+  //               transform: `rotate(${overlayPreset.rotate ?? 0}deg)`,
+  //               objectFit: "contain",
+  //             }}
+  //             draggable={false}
+  //             crossOrigin="anonymous"
+  //             onClick={() => setShowLargeModal(true)}
+  //           />
+  //         ) : (
+  //           <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground p-6">
+  //             <Sparkles className="w-12 h-12 mb-3 opacity-60" />
+  //             <p className="text-center">
+  //               Start with one idea,{" "}
+  //               <span className="font-semibold">anything works</span>
+  //             </p>
+  //           </div>
+  //         )}
+  //       </div>
+
+  //       {generatedImage && (
+  //         <div className="mt-4 flex items-center gap-3">
+  //           <Button
+  //             onClick={handleAddToCart}
+  //             variant="outline"
+  //             size="sm"
+  //             className="flex items-center gap-2"
+  //           >
+  //             <ShoppingCart className="w-4 h-4" />
+  //             <span className="sr-only">Add to cart</span>
+  //           </Button>
+
+  //           <Button
+  //             onClick={handleBuy}
+  //             className="ml-auto bg-sale-blue hover:bg-sale-blue/95 text-white font-semibold py-2 px-4"
+  //           >
+  //             Buy
+  //           </Button>
+
+  //           <Button
+  //             variant="ghost"
+  //             size="sm"
+  //             onClick={handleGenerate}
+  //             className="text-muted-foreground"
+  //           >
+  //             Regenerate
+  //           </Button>
+  //         </div>
+  //       )}
+
+  //       {!user && generationCount > 0 && (
+  //         <div className="mt-4 text-center text-sm text-muted-foreground">
+  //           {generationCount}/{FREE_USER_LIMIT} free generations used
+  //         </div>
+  //       )}
+  //     </div>
+  //   );
 
   return (
     <div className="min-h-screen bg-background">
-      <nav className="sticky top-0 z-50 bg-primary/90 text-primary-foreground backdrop-blur-sm border-b border-border">
+      <nav className="sticky top-0 z-[60] bg-primary/90 text-primary-foreground backdrop-blur-sm border-b border-border">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <Link to="/" className="text-lg md:text-xl font-bold tracking-wider">
-              <img className="w-24 h-10 object-contain cursor-pointer" src={Logo} alt="Tesora Logo" />
+              <img
+                className="w-24 h-10 object-contain cursor-pointer"
+                src={Logo}
+                alt="Tesora Logo"
+              />
             </Link>
             <div className="hidden md:flex items-center gap-6">
               <Link to="/" className="hover:text-accent transition">
@@ -818,7 +947,10 @@ export default function AIGenerator() {
                       <User className="w-5 h-5" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48 bg-background border border-border">
+                  <DropdownMenuContent
+                    align="end"
+                    className="w-48 bg-background border border-border"
+                  >
                     <DropdownMenuItem asChild>
                       <Link to="/account" className="cursor-pointer">
                         <User className="w-4 h-4 mr-2" />
@@ -832,19 +964,28 @@ export default function AIGenerator() {
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+                    <DropdownMenuItem
+                      onClick={handleLogout}
+                      className="cursor-pointer"
+                    >
                       <LogOut className="w-4 h-4 mr-2" />
                       Logout
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
-                <Link to="/auth" className="p-2 rounded-md hover:bg-primary-foreground/6">
+                <Link
+                  to="/auth"
+                  className="p-2 rounded-md hover:bg-primary-foreground/6"
+                >
                   <User className="w-5 h-5" />
                 </Link>
               )}
 
-              <button onClick={() => setCartOpen(true)} className="relative p-2 rounded-md hover:bg-muted/60 transition">
+              <button
+                onClick={() => setCartOpen(true)}
+                className="relative p-2 rounded-md hover:bg-muted/60 transition"
+              >
                 <ShoppingCart className="w-4 h-4" />
                 {cartCount > 0 && (
                   <span className="absolute -top-2 -right-2 bg-accent text-accent-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center font-semibold">
@@ -867,55 +1008,88 @@ export default function AIGenerator() {
           <header className="text-center mb-10">
             <div className="inline-flex items-center gap-2 bg-sale-blue text-white text-xs font-semibold px-3 py-1 rounded-full mb-4">
               <Sparkles className="w-4 h-4" />
-              AI-Powered Design
+              Your Design Assistant
             </div>
             <h1 className="text-3xl md:text-4xl font-bold mb-2">
-              Create your custom{" "}
+              Design Your Own{" "}
               <span className="text-sale-blue">
                 <SlideRotatingWords words={PRODUCT_WORDS} ms={2000} />
               </span>
             </h1>
-            <p className="text-sm text-muted-foreground max-w-2xl mx-auto">Minimal, fast, and focused — design prints for apparel using AI.</p>
+            <p className="text-sm text-muted-foreground max-w-2xl mx-auto">
+              Minimal, fast, and focused — design prints for apparel using AI.
+            </p>
           </header>
 
           <div className="grid lg:grid-cols-2 gap-8 items-start">
-            <section className="space-y-6 order-2 lg:order-1">
-              <form className="bg-card rounded-2xl p-6 shadow-sm border border-border"
+
+
+            <section className="space-y-6 order-2 lg:order-1 relative z-50">
+
+              <form
+                className="bg-card rounded-2xl p-6 shadow-sm border border-border"
                 onSubmit={(e) => {
                   e.preventDefault();
                   handleGenerate();
-                }}>
+                }}
+              >
                 <div className="flex items-start justify-between mb-4">
-                  <h2 className="text-lg font-semibold">Design Settings</h2>
-                  <div className="text-sm text-muted-foreground">Quick options</div>
+                  <h2 className="text-lg font-semibold">Bring your idea to life</h2>
+                  <Link to="/ai-cloth-converter">
+                    <Button variant="outline" size="sm" className="flex items-center gap-2">
+                      <CloudLightning className="w-4 h-4" />
+                      <span className="hidden sm:inline text-sm">Hidden Feature</span>
+                    </Button>
+                  </Link>
                 </div>
 
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="prompt" className="text-sm font-semibold mb-2 block">
-                      Describe Your Design
+                    <Label
+                      htmlFor="prompt"
+                      className="text-sm font-semibold mb-2 block"
+                    >
+                      How Do You Want Your Design ?
                     </Label>
                     <Textarea
                       id="prompt"
-                      placeholder="E.g., A futuristic robot playing guitar under neon lights..."
+                      placeholder={`• Minimal Tiger in Black & Gold
+• Check our Prompt Library on our Instagram Page for ideas`}
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
                       rows={4}
                       className="resize-none"
                     />
+
                   </div>
 
                   <div>
-                    <Label htmlFor="designText" className="text-sm font-semibold mb-2 block">
-                      Add Text <span className="text-muted-foreground text-xs">(optional)</span>
+                    <Label
+                      htmlFor="designText"
+                      className="text-sm font-semibold mb-2 block"
+                    >
+                      Add Words or Quotes Here{" "}
+                      <span className="text-muted-foreground text-xs">
+                        (optional)
+                      </span>
                     </Label>
-                    <Input id="designText" placeholder="e.g., 'Live Loud'" value={designText} onChange={(e) => setDesignText(e.target.value)} maxLength={120} />
-                    <p className="text-xs text-muted-foreground mt-1">This text will be included in your design if provided.</p>
+                    <Input
+                      id="designText"
+                      placeholder={`• Live Loud • Kaleshi Aurat • Main character Energy • Main Apni Favourite Hoon`}
+                      value={designText}
+                      onChange={(e) => setDesignText(e.target.value)}
+                      maxLength={120}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      This Text Will Be Included In The Design.
+                    </p>
                   </div>
 
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div>
-                      <Label className="text-sm font-semibold mb-2 block">Style</Label>
+                      <Label className="text-sm font-semibold mb-2 block">
+                        Your Vibe
+                      </Label>
                       <Select value={style} onValueChange={setStyle}>
                         <SelectTrigger id="style">
                           <SelectValue />
@@ -937,8 +1111,13 @@ export default function AIGenerator() {
                     </div>
 
                     <div>
-                      <Label className="text-sm font-semibold mb-2 block">Color Scheme</Label>
-                      <Select value={colorScheme} onValueChange={setColorScheme}>
+                      <Label className="text-sm font-semibold mb-2 block">
+                        Color Mood
+                      </Label>
+                      <Select
+                        value={colorScheme}
+                        onValueChange={setColorScheme}
+                      >
                         <SelectTrigger id="colorScheme">
                           <SelectValue />
                         </SelectTrigger>
@@ -946,10 +1125,16 @@ export default function AIGenerator() {
                           <SelectItem value="normal">Normal</SelectItem>
                           <SelectItem value="vibrant">Vibrant</SelectItem>
                           <SelectItem value="pastel">Pastel</SelectItem>
-                          <SelectItem value="monochrome">Monochrome</SelectItem>
+                          <SelectItem value="monochrome">
+                            Monochrome
+                          </SelectItem>
                           <SelectItem value="neon">Neon</SelectItem>
-                          <SelectItem value="earth-tones">Earth Tones</SelectItem>
-                          <SelectItem value="black-white">Black & White</SelectItem>
+                          <SelectItem value="earth-tones">
+                            Earth Tones
+                          </SelectItem>
+                          <SelectItem value="black-white">
+                            Black & White
+                          </SelectItem>
                           <SelectItem value="cool">Cool Tones</SelectItem>
                           <SelectItem value="warm">Warm Tones</SelectItem>
                           <SelectItem value="gradient">Gradient</SelectItem>
@@ -957,45 +1142,160 @@ export default function AIGenerator() {
                       </Select>
                     </div>
                   </div>
+                </div>
+
+                {/* ----- PRODUCT CONTROLS: ALWAYS VISIBLE ----- */}
+                <div className="space-y-6 pt-6 border-t border-border mt-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold">Customize Your Product</h3>
+                  </div>
 
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div>
-                      <Label className="text-sm font-semibold mb-2 block">Clothing Type</Label>
-                      <Select value={clothingType} onValueChange={(val) => setClothingType(val as ClothingType)}>
+                      <Label className="text-sm font-semibold mb-2 block">
+                        Select Apparel Type
+                      </Label>
+                      <Select
+                        value={clothingType}
+                        onValueChange={(val) =>
+                          setClothingType(val as ClothingType)
+                        }
+                      >
                         <SelectTrigger id="clothingType">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="t-shirt">T-Shirt</SelectItem>
-                          <SelectItem value="polo">Polo</SelectItem>
+                          <SelectItem value="t-shirt">Classic T-Shirt</SelectItem>
+                          {/* <SelectItem value="polo">Polo T-Shirt</SelectItem> */}
                           <SelectItem value="hoodie">Hoodie</SelectItem>
-                          <SelectItem value="tops">Tops</SelectItem>
+                          {/* <SelectItem value="pullover">Pullover</SelectItem> */}
+                          <SelectItem value="oversized-tshirt">Oversized Tshirt</SelectItem>
+                          <SelectItem value="sweatshirt">
+                            Sweatshirt
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {/* 💰 Show price for selected clothing */}
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Price: <span className="font-semibold">₹{currentPrice} (No Hidden Charges)</span>
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label className="text-sm font-semibold mb-2 block">
+                        Design Placement
+                      </Label>
+                      <Select
+                        value={imagePosition}
+                        onValueChange={(val) => {
+                          if (val === "front-back") {
+                            navigate("/ai-cloth-converter");
+                            return;
+                          }
+
+                          setImagePosition(val as ImagePosition);
+                        }}
+                      >
+                        <SelectTrigger id="imagePosition">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(clothingType === "t-shirt" ||
+                            clothingType === "hoodie" ||
+                            clothingType === "sweatshirt") && (
+                              <>
+                                <SelectItem value="front">Front</SelectItem>
+                                <SelectItem value="back">Back</SelectItem>
+                                <SelectItem value="front-back">Front & Back</SelectItem>
+                              </>
+                            )}
+                          {clothingType === "polo" && (
+                            <SelectItem value="back">Back</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-semibold mb-2 block">
+                        Size Category
+                      </Label>
+                      <Select
+                        value={sizeCategory}
+                        onValueChange={(category: SizeCategory) => {
+                          setSizeCategory(category);
+                          // Reset to first available size in the new category
+                          const newSizes = sizeMap[category];
+                          if (newSizes.length > 0) {
+                            setSelectedSize(newSizes[0]);
+                          }
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Men">Men</SelectItem>
+                          <SelectItem value="Women">Women</SelectItem>
+                          <SelectItem value="Kids">Kids</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
 
                     <div>
-                      <Label className="text-sm font-semibold mb-2 block">Position</Label>
-                      <Select value={imagePosition} onValueChange={(val) => setImagePosition(val as ImagePosition)}>
-                        <SelectTrigger id="imagePosition">
-                          <SelectValue />
+                      <Label className="text-sm font-semibold mb-2 block">
+                        Size
+                      </Label>
+                      <Select
+                        value={selectedSize ?? undefined}
+                        onValueChange={(v) => setSelectedSize(v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select size" />
                         </SelectTrigger>
                         <SelectContent>
-                          {(clothingType === "t-shirt" || clothingType === "hoodie") && (
-                            <>
-                              <SelectItem value="front">Front</SelectItem>
-                              <SelectItem value="back">Back</SelectItem>
-                            </>
-                          )}
-                          {clothingType === "polo" && <SelectItem value="back">Back</SelectItem>}
-                          {clothingType === "tops" && <SelectItem value="front">Front</SelectItem>}
+                          {sizeMap[sizeCategory].map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {s}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+
+                    <div className="sm:col-span-2">
+                      <Label className="text-sm font-semibold mb-2 block">
+                        Color
+                      </Label>
+                      <Select
+                        value={selectedColor ?? undefined}
+                        onValueChange={(v) => setSelectedColor(v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select color" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableColors.map((c) => (
+                            <SelectItem key={c} value={c}>
+                              {c}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
 
                   <div>
-                    <Button type="submit" disabled={isGenerating} className="w-full bg-sale-blue hover:bg-sale-blue/90 text-white font-bold py-4 text-base">
+                    <Button
+                      type="submit"
+                      disabled={isGenerating}
+                      className="w-full bg-sale-blue hover:bg-sale-blue/90 text-white font-bold py-4 text-base"
+                    >
                       {isGenerating ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -1004,7 +1304,7 @@ export default function AIGenerator() {
                       ) : (
                         <>
                           <Sparkles className="w-4 h-4 mr-2" />
-                          Generate Design
+                          Create My Outift
                         </>
                       )}
                     </Button>
@@ -1012,89 +1312,247 @@ export default function AIGenerator() {
                 </div>
               </form>
 
-              <div className="bg-muted rounded-2xl p-5 text-sm text-muted-foreground">
-                <h3 className="font-medium mb-2">Tips for better results</h3>
-                <ul className="space-y-2 list-none">
-                  <li>• Use clear descriptors (objects, colors, mood)</li>
-                  <li>• Add exact text in the text field if you want it included</li>
-                  <li>• Try different styles for varied outputs</li>
-                </ul>
+
+
+              <div className="bg-muted rounded-2xl p-5 text-sm text-muted-foreground space-y-4">
+                <div>
+                  <h3 className="font-medium mb-2">Want a Better First Design?</h3>
+                  <ul className="space-y-2 list-none">
+                    <li>• Be Descriptive - Mention objects, colours or mood.</li>
+                    <li>• Add Text only if you want words in design.</li>
+                    <li>•  Try different Vibes and Moods for fresher looks.</li>
+                    <li>• Don't forget to wishlist.</li>
+                    <li>• We design it to look good when worn.</li>
+                    <li>• You can generate as many times you want before buying.</li>
+                  </ul>
+                </div>
               </div>
+
             </section>
 
-            <aside className="order-1 lg:order-2">
+            {/* <aside className="order-1 lg:order-2">
               <MockupPreview />
+            </aside> */}
+
+            <aside className="order-1 lg:order-2">
+              <div className="min-h-[600px] h-full rounded-[2.5rem] border border-muted-foreground/10 flex flex-col items-center justify-center p-8 bg-white dark:bg-muted/5 shadow-2xl shadow-black/[0.02]">
+
+                {!generatedImage && (
+                  <div className="text-center space-y-4">
+                    <Sparkles className="w-12 h-12 mx-auto text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                      Generate a design to see preview
+                    </p>
+                  </div>
+                )}
+
+                {generatedImage && (
+                  <div className="relative w-full h-full flex flex-col items-center justify-center animate-in fade-in zoom-in duration-500">
+                    <div
+                      className="relative w-full max-w-[420px] aspect-[3/4] rounded-2xl overflow-hidden shadow-xl bg-muted/20 cursor-pointer group"
+                      onClick={() => setShowLargeModal(true)}
+                    >
+                      {/* BASE APPAREL IMAGE */}
+                      <img
+                        src={baseImageSrc}
+                        alt="Apparel Mockup"
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      />
+                      {/* GENERATED DESIGN OVERLAY */}
+                      <img
+                        src={generatedImage}
+                        alt="Design Overlay"
+                        className="absolute object-contain mix-blend-multiply opacity-90 transition-transform duration-200"
+                        style={{
+                          width: `${overlayPreset.widthPct}%`,
+                          left: `${overlayPreset.leftPct}%`,
+                          top: `${overlayPreset.topPct}%`,
+                          transform: overlayPreset.rotate ? `rotate(${overlayPreset.rotate}deg)` : undefined,
+                        }}
+                      />
+
+                      {/* HOVER OVERLAY */}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
+                    </div>
+
+                    <div className="mt-6 flex items-center gap-3 animate-in slide-in-from-bottom-2 fade-in duration-700 delay-300">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="shadow-sm border"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const link = document.createElement("a");
+                          link.href = generatedImage;
+                          link.download = `ai-design-${Date.now()}.png`;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        }}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Download Artwork
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setShowLargeModal(true)}>
+                        <Eye className="w-4 h-4 mr-2" />
+                        Preview
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+
+                {generatedImage && (
+                  <div className="flex gap-4 pt-6">
+                    <Button variant="outline" onClick={handleAddToCart}>
+                      <ShoppingCart className="w-4 h-4 mr-2" />
+                      Add to Cart
+                    </Button>
+
+                    <Button className="bg-sale-blue" onClick={handleBuy}>
+                      Buy Now
+                    </Button>
+                  </div>
+                )}
+              </div>
             </aside>
+
           </div>
         </div>
-      </main>
+      </main >
 
       <CartSidebar open={cartOpen} onClose={() => setCartOpen(false)} />
       <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
 
       {/* Variant modal for selecting size/color before saving product */}
-      {variantModalOpen && (
-        <div className="fixed inset-0 z-[10000000] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setVariantModalOpen(false)} />
+      {
+        variantModalOpen && (
+          <div className="fixed inset-0 z-[10000000] flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-black/60"
+              onClick={() => setVariantModalOpen(false)}
+            />
 
-          <div className="relative z-10 bg-card rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold">Choose size & color</h3>
-                <div className="text-sm text-muted-foreground">Select a size and color for your product</div>
-              </div>
-              <button onClick={() => setVariantModalOpen(false)} className="text-muted-foreground">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4 ">
-              <div>
-                <Label className="text-sm font-semibold mb-2 block z-[10000000]" >Size</Label>
-                <Select value={selectedSize ?? undefined} onValueChange={(v) => setSelectedSize(v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select size" />
-                  </SelectTrigger>
-                  <SelectContent className="z-[10000001]">
-                    {availableSizes.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="relative z-10 bg-card rounded-2xl shadow-2xl w-full max-w-md p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold">Choose size & color</h3>
+                  <div className="text-sm text-muted-foreground">
+                    Select a size and color for your product
+                  </div>
+                </div>
+                <button
+                  onClick={() => setVariantModalOpen(false)}
+                  className="text-muted-foreground"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
-              <div>
-                <Label className="text-sm font-semibold mb-2 block ">Color</Label>
-                <Select value={selectedColor ?? undefined} onValueChange={(v) => setSelectedColor(v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select color" />
-                  </SelectTrigger>
-                  <SelectContent className="z-[10000001]">
-                    {availableColors.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+              <div className="space-y-4 ">
+                <div>
+                  <Label className="text-sm font-semibold mb-2 block z-[10000000]">
+                    Size Category
+                  </Label>
+                  <Select
+                    value={sizeCategory}
+                    onValueChange={(category: SizeCategory) => {
+                      setSizeCategory(category);
+                      // Reset to first available size in the new category
+                      const newSizes = sizeMap[category];
+                      if (newSizes.length > 0) {
+                        setSelectedSize(newSizes[0]);
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="z-[10000001]">
+                      <SelectItem value="Men">Men</SelectItem>
+                      <SelectItem value="Women">Women</SelectItem>
+                      <SelectItem value="Kids">Kids</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div className="mt-6 flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={() => setVariantModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button className="flex-1 bg-sale-blue" onClick={handleConfirmVariant}>
-                Confirm & Save
-              </Button>
+                <div>
+                  <Label className="text-sm font-semibold mb-2 block z-[10000000]">
+                    Size
+                  </Label>
+                  <Select
+                    value={selectedSize ?? undefined}
+                    onValueChange={(v) => setSelectedSize(v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select size" />
+                    </SelectTrigger>
+                    <SelectContent className="z-[10000001]">
+                      {sizeMap[sizeCategory].map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-semibold mb-2 block ">
+                    Color
+                  </Label>
+                  <Select
+                    value={selectedColor ?? undefined}
+                    onValueChange={(v) => setSelectedColor(v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select color" />
+                    </SelectTrigger>
+                    <SelectContent className="z-[10000001]">
+                      {availableColors.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <Label className="text-sm font-semibold mb-2 block">
+                  Add a Note <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
+                <Textarea
+                  placeholder="Special instructions or details..."
+                  value={customNote}
+                  onChange={(e) => setCustomNote(e.target.value)}
+                  className="resize-none"
+                  rows={3}
+                />
+              </div>
+
+              <div className="mt-6 flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setVariantModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 bg-sale-blue"
+                  onClick={handleConfirmVariant}
+                >
+                  Confirm & Save
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-      {showSurvey && (
+      {/* {showSurvey && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
           <div className="bg-card rounded-2xl shadow-2xl max-w-md w-full p-6 relative">
             <button
@@ -1110,18 +1568,29 @@ export default function AIGenerator() {
               <div className="w-10 h-10 bg-sale-blue/10 rounded-full flex items-center justify-center mb-3">
                 <Sparkles className="w-5 h-5 text-sale-blue" />
               </div>
-              <h3 className="text-lg font-semibold mb-1">Help us personalize</h3>
-              <p className="text-sm text-muted-foreground">Choose a few preferences to improve recommendations.</p>
+              <h3 className="text-lg font-semibold mb-1">
+                Help us personalize
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Choose a few preferences to improve recommendations.
+              </p>
             </div>
 
             <div className="space-y-3">
               <div>
-                <Label className="text-sm font-semibold mb-2 block">Preferred Style</Label>
-                <Select value={surveyData.preferredStyle} onValueChange={(val) => setSurveyData({ ...surveyData, preferredStyle: val })}>
+                <Label className="text-sm font-semibold mb-2 block">
+                  Preferred Style
+                </Label>
+                <Select
+                  value={surveyData.preferredStyle}
+                  onValueChange={(val) =>
+                    setSurveyData({ ...surveyData, preferredStyle: val })
+                  }
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select..." />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-[99990]">
                     <SelectItem value="modern">Modern</SelectItem>
                     <SelectItem value="vintage">Vintage</SelectItem>
                     <SelectItem value="minimalist">Minimalist</SelectItem>
@@ -1135,33 +1604,56 @@ export default function AIGenerator() {
               </div>
 
               <div>
-                <Label className="text-sm font-semibold mb-2 block">Preferred Colors</Label>
-                <Select value={surveyData.preferredColorScheme} onValueChange={(val) => setSurveyData({ ...surveyData, preferredColorScheme: val })}>
+                <Label className="text-sm font-semibold mb-2 block">
+                  Preferred Colors
+                </Label>
+                <Select
+                  value={surveyData.preferredColorScheme}
+                  onValueChange={(val) =>
+                    setSurveyData({
+                      ...surveyData,
+                      preferredColorScheme: val,
+                    })
+                  }
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select..." />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-[99990]">
                     <SelectItem value="vibrant">Vibrant</SelectItem>
                     <SelectItem value="pastel">Pastel</SelectItem>
                     <SelectItem value="monochrome">Monochrome</SelectItem>
                     <SelectItem value="neon">Neon</SelectItem>
                     <SelectItem value="earth-tones">Earth Tones</SelectItem>
-                    <SelectItem value="black-white">Black & White</SelectItem>
+                    <SelectItem value="black-white">
+                      Black & White
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
-                <Label className="text-sm font-semibold mb-2 block">Preferred Clothing</Label>
-                <Select value={surveyData.preferredClothingType} onValueChange={(val) => setSurveyData({ ...surveyData, preferredClothingType: val })}>
+                <Label className="text-sm font-semibold mb-2 block">
+                  Preferred Clothing
+                </Label>
+                <Select
+                  value={surveyData.preferredClothingType}
+                  onValueChange={(val) =>
+                    setSurveyData({
+                      ...surveyData,
+                      preferredClothingType: val,
+                    })
+                  }
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select..." />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-[99990]">
                     <SelectItem value="t-shirt">T-Shirt</SelectItem>
                     <SelectItem value="polo">Polo</SelectItem>
                     <SelectItem value="hoodie">Hoodie</SelectItem>
                     <SelectItem value="tops">Tops</SelectItem>
+                    <SelectItem value="sweatshirt">Sweatshirt</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1181,14 +1673,22 @@ export default function AIGenerator() {
               <Button
                 onClick={async () => {
                   try {
-                    const sessionId = user?.id || `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                    await (supabase as any).from("user_preferences").insert({
-                      user_id: user?.id ?? null,
-                      session_id: sessionId,
-                      preferred_style: surveyData.preferredStyle,
-                      preferred_color_scheme: surveyData.preferredColorScheme,
-                      preferred_clothing_type: surveyData.preferredClothingType,
-                    });
+                    const sessionId =
+                      user?.id ||
+                      `anon_${Date.now()}_${Math.random()
+                        .toString(36)
+                        .substr(2, 9)}`;
+                    await (supabase as any)
+                      .from("user_preferences")
+                      .insert({
+                        user_id: user?.id ?? null,
+                        session_id: sessionId,
+                        preferred_style: surveyData.preferredStyle,
+                        preferred_color_scheme:
+                          surveyData.preferredColorScheme,
+                        preferred_clothing_type:
+                          surveyData.preferredClothingType,
+                      });
                     localStorage.setItem("survey_completed", "true");
                     setSurveyCompleted(true);
                     setShowSurvey(false);
@@ -1205,39 +1705,56 @@ export default function AIGenerator() {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
-      {showLargeModal && generatedImage && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4" aria-modal="true" role="dialog">
-          <div className="absolute inset-0 bg-black/70" onClick={() => setShowLargeModal(false)} />
+      {
+        showLargeModal && generatedImage && (
+          <div
+            className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
+            aria-modal="true"
+            role="dialog"
+          >
+            <div
+              className="absolute inset-0 bg-black/70"
+              onClick={() => setShowLargeModal(false)}
+            />
 
-          <div className="relative z-10 w-full max-w-[70vw] max-h-[80vh] flex flex-col items-center">
-            <button onClick={() => setShowLargeModal(false)} className="absolute -top-10 right-0 bg-card/90 backdrop-blur rounded-full p-2 hover:scale-105 transition">
-              <X className="w-5 h-5" />
-            </button>
+            <div className="relative z-10 w-full max-w-[70vw] max-h-[80vh] flex flex-col items-center">
+              <button
+                onClick={() => setShowLargeModal(false)}
+                className="absolute -top-10 right-0 bg-card/90 backdrop-blur rounded-full p-2 hover:scale-105 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
 
-            <div className="bg-card rounded-xl shadow-2xl p-4 w-full flex flex-col items-center">
-              <div className="flex items-center justify-between w-full mb-3">
-                <div className="text-sm text-muted-foreground">Preview</div>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={handleAddToCart} className="flex items-center gap-2">
-                    <ShoppingCart className="w-4 h-4" /> Add to Cart
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={handleAddToWishlist} className="flex items-center gap-2">
-                    <Heart className="w-4 h-4" /> Wishlist
-                  </Button>
+              <div className="bg-card rounded-xl shadow-2xl p-4 w-full flex flex-col items-center">
+                <div className="flex items-center justify-between w-full mb-3">
+                  <div className="text-sm text-muted-foreground">Preview</div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleAddToCart}
+                      className="flex items-center gap-2"
+                    >
+                      <ShoppingCart className="w-4 h-4" /> Add to Cart
+                    </Button>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-center justify-center w-full">
-                <img src={generatedImage} alt="Large generated design" className="object-contain max-w-[65vw] max-h-[65vh] rounded-md" draggable={false} />
+                <div className="flex items-center justify-center w-full">
+                  <img
+                    src={generatedImage}
+                    alt="Large generated design"
+                    className="object-contain max-w-[65vw] max-h-[65vh] rounded-md"
+                    draggable={false}
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-      {/* Inline Portal-based modals */}
       <LoginRequiredModal
         open={showLoginModal}
         onClose={() => setShowLoginModal(false)}
@@ -1248,6 +1765,46 @@ export default function AIGenerator() {
         generationCount={generationCount}
         limit={AUTHENTICATED_USER_LIMIT}
       />
+    </div >
+  );
+}
+
+
+function ResultView({ label, url, onClick }: { label: string; url: string; onClick?: (url: string) => void; }) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between px-2">
+        <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+          {label}
+        </span>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 rounded-full"
+          onClick={() => {
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `ai-design-${Date.now()}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }}
+        >
+          <Download className="w-4 h-4" />
+        </Button>
+      </div>
+
+      <div className="aspect-[3/4] rounded-[2rem] overflow-hidden border shadow-lg bg-muted group/img relative">
+        <img
+          src={url}
+          alt={label}
+          onClick={() => onClick?.(url)}
+          className="w-full h-full object-cover transition-transform duration-700 group-hover/img:scale-110 cursor-zoom-in"
+        />
+        <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/5 transition-colors pointer-events-none" />
+      </div>
     </div>
   );
 }
+

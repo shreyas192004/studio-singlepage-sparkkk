@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useDesigner } from "@/contexts/DesignerContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -12,18 +12,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Eye, Download, FileText, Package } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { ArrowLeft, Eye, Download, FileText, Package, Home } from "lucide-react";
 import { toast } from "sonner";
+// @ts-ignore - html2pdf has no perfect TS types
+import html2pdf from "html2pdf.js";
 
 interface OrderItem {
   id: string;
+  order_id: string;
   product_id: string;
   product_name: string;
   product_image: string | null;
@@ -32,6 +36,10 @@ interface OrderItem {
   total_price: number;
   size: string | null;
   color: string | null;
+  status: string; // pending | delivered | cancelled
+  delivery_order_id?: string | null;
+  cancellation_reason?: string | null;
+  dispatch_date?: string | null; // 👈 NEW: ensure this column exists in order_items (e.g. dispatch_date date)
 }
 
 interface Address {
@@ -64,8 +72,36 @@ const statusColors: Record<string, string> = {
   processing: "bg-blue-100 text-blue-800",
   shipped: "bg-purple-100 text-purple-800",
   delivered: "bg-green-100 text-green-800",
+  completed: "bg-green-100 text-green-800",
   cancelled: "bg-red-100 text-red-800",
 };
+
+// --- helpers for PDF ---
+const escapeHtml = (v: string | number | null | undefined) =>
+  v === null || v === undefined
+    ? ""
+    : String(v)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+
+const safeUrl = (url: string | null) => {
+  if (!url) return "";
+  try {
+    return encodeURI(url);
+  } catch {
+    return url;
+  }
+};
+
+const pdfOptions = (filename: string) => ({
+  margin: 8,
+  filename,
+  image: { type: "jpeg", quality: 0.98 },
+  html2canvas: { scale: 2, useCORS: true },
+  jsPDF: { unit: "mm", format: "a4", orientation: "portrait" as const },
+});
 
 const DesignerMyOrders = () => {
   const { user, isDesigner, loading } = useDesigner();
@@ -75,6 +111,24 @@ const DesignerMyOrders = () => {
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+
+  // status modal state
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [statusDialogType, setStatusDialogType] = useState<
+    "single" | "bulk" | null
+  >(null);
+  const [statusDialogStatus, setStatusDialogStatus] = useState<
+    "delivered" | "cancelled" | null
+  >(null);
+  const [statusDialogOrder, setStatusDialogOrder] = useState<Order | null>(
+    null
+  );
+  const [statusDialogItem, setStatusDialogItem] = useState<OrderItem | null>(
+    null
+  );
+  const [deliveryOrderId, setDeliveryOrderId] = useState("");
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [dispatchDate, setDispatchDate] = useState(""); // 👈 NEW (YYYY-MM-DD)
 
   useEffect(() => {
     if (!loading && !isDesigner) {
@@ -129,10 +183,10 @@ const DesignerMyOrders = () => {
         return;
       }
 
-      // Get unique order IDs
-      const orderIds = [...new Set(orderItems.map((item) => item.order_id))];
+      const orderIds = [
+        ...new Set((orderItems as any[]).map((item) => item.order_id)),
+      ];
 
-      // Fetch orders with addresses
       const { data: ordersData } = await supabase
         .from("orders")
         .select("*, shipping_address_id")
@@ -144,9 +198,8 @@ const DesignerMyOrders = () => {
         return;
       }
 
-      // Fetch addresses
       const addressIds = ordersData
-        .map((o) => o.shipping_address_id)
+        .map((o: any) => o.shipping_address_id)
         .filter(Boolean);
 
       const { data: addresses } = await supabase
@@ -154,11 +207,12 @@ const DesignerMyOrders = () => {
         .select("*")
         .in("id", addressIds);
 
-      // Combine orders with their items (only designer's products) and addresses
-      const enrichedOrders: Order[] = ordersData.map((order) => {
-        const items = orderItems.filter((item) => item.order_id === order.id);
+      const enrichedOrders: Order[] = ordersData.map((order: any) => {
+        const items = (orderItems as any[]).filter(
+          (item) => item.order_id === order.id
+        ) as OrderItem[];
         const address = addresses?.find(
-          (a) => a.id === order.shipping_address_id
+          (a: any) => a.id === order.shipping_address_id
         );
 
         return {
@@ -177,286 +231,763 @@ const DesignerMyOrders = () => {
     }
   };
 
+  // --- helper to recalc order.status based on all items ---
+  const recalculateOrderStatus = async (orderId: string) => {
+    const { data: items, error } = await supabase
+      .from("order_items")
+      .select("status")
+      .eq("order_id", orderId);
+
+    if (error || !items) {
+      console.error("Error fetching items for status calc:", error);
+      return;
+    }
+
+    const total = items.length;
+    const deliveredCount = items.filter((it) => it.status === "delivered")
+      .length;
+
+    let newStatus = "pending";
+    if (deliveredCount === 0) {
+      newStatus = "pending";
+    } else if (deliveredCount < total) {
+      newStatus = "processing";
+    } else {
+      newStatus = "completed";
+    }
+
+    const { error: updateError } = await supabase
+      .from("orders")
+      .update({ status: newStatus })
+      .eq("id", orderId);
+
+    if (updateError) {
+      console.error("Error updating order status:", updateError);
+    }
+  };
+
+  // --- core update functions (no UI) ---
+  const updateSingleItemStatus = async (
+    item: OrderItem,
+    orderId: string,
+    newStatus: string,
+    deliveryId?: string | null,
+    cancelReason?: string | null,
+    dispatchDateValue?: string | null // 👈 NEW optional param
+  ) => {
+    try {
+      let payload: any = { status: newStatus };
+
+      if (newStatus === "delivered") {
+        payload.delivery_order_id = deliveryId ?? null;
+        payload.cancellation_reason = null;
+        payload.dispatch_date = dispatchDateValue ?? null;
+      } else if (newStatus === "cancelled") {
+        payload.cancellation_reason = cancelReason ?? null;
+        payload.delivery_order_id = null;
+        payload.dispatch_date = null;
+      } else {
+        payload.delivery_order_id = null;
+        payload.cancellation_reason = null;
+        payload.dispatch_date = null;
+      }
+
+      const { error } = await supabase
+        .from("order_items")
+        .update(payload)
+        .eq("id", item.id);
+
+      if (error) throw error;
+
+      await recalculateOrderStatus(orderId);
+
+      setSelectedOrder((prev) =>
+        prev && prev.id === orderId
+          ? {
+              ...prev,
+              order_items: prev.order_items.map((oi) =>
+                oi.id === item.id ? { ...oi, ...payload } : oi
+              ),
+            }
+          : prev
+      );
+
+      await fetchDesignerOrders();
+      toast.success("Item status updated");
+    } catch (err: any) {
+      console.error("Error updating item status:", err);
+      toast.error("Failed to update item status");
+    }
+  };
+
+  const updateBulkStatus = async (
+    order: Order,
+    newStatus: string,
+    deliveryId?: string | null,
+    cancelReason?: string | null,
+    dispatchDateValue?: string | null // 👈 NEW optional param
+  ) => {
+    try {
+      const itemIds = order.order_items.map((i) => i.id);
+      if (itemIds.length === 0) return;
+
+      let payload: any = { status: newStatus };
+
+      if (newStatus === "delivered") {
+        payload.delivery_order_id = deliveryId ?? null;
+        payload.cancellation_reason = null;
+        payload.dispatch_date = dispatchDateValue ?? null;
+      } else if (newStatus === "cancelled") {
+        payload.cancellation_reason = cancelReason ?? null;
+        payload.delivery_order_id = null;
+        payload.dispatch_date = null;
+      } else {
+        payload.delivery_order_id = null;
+        payload.cancellation_reason = null;
+        payload.dispatch_date = null;
+      }
+
+      const { error } = await supabase
+        .from("order_items")
+        .update(payload)
+        .in("id", itemIds);
+
+      if (error) throw error;
+
+      await recalculateOrderStatus(order.id);
+
+      setSelectedOrder((prev) =>
+        prev && prev.id === order.id
+          ? {
+              ...prev,
+              order_items: prev.order_items.map((oi) => ({
+                ...oi,
+                ...payload,
+              })),
+            }
+          : prev
+      );
+
+      await fetchDesignerOrders();
+      toast.success("Order items status updated");
+    } catch (err: any) {
+      console.error("Error in bulk status update:", err);
+      toast.error("Failed to update order items status");
+    }
+  };
+
+  // --- open modal for delivered / cancelled ---
+  const openStatusModal = (
+    type: "single" | "bulk",
+    status: "delivered" | "cancelled",
+    order: Order,
+    item: OrderItem | null
+  ) => {
+    setStatusDialogType(type);
+    setStatusDialogStatus(status);
+    setStatusDialogOrder(order);
+    setStatusDialogItem(item);
+    setDeliveryOrderId("");
+    setCancellationReason("");
+    setDispatchDate("");
+    setStatusDialogOpen(true);
+  };
+
+  // --- handlers for selects ---
+
+  // for single item (details modal)
+  const handleItemStatusSelect = (
+    item: OrderItem,
+    order: Order,
+    newStatus: string
+  ) => {
+    if (newStatus === "delivered" || newStatus === "cancelled") {
+      openStatusModal("single", newStatus as "delivered" | "cancelled", order, item);
+    } else {
+      // e.g. back to pending, no extra data
+      updateSingleItemStatus(item, order.id, newStatus);
+    }
+  };
+
+  // for bulk (list table)
+  const handleBulkStatusSelect = (order: Order, newStatus: string) => {
+    if (newStatus === "mixed") return;
+
+    if (newStatus === "delivered" || newStatus === "cancelled") {
+      openStatusModal("bulk", newStatus as "delivered" | "cancelled", order, null);
+    } else {
+      updateBulkStatus(order, newStatus);
+    }
+  };
+
+  // --- confirm in modal ---
+  const handleConfirmStatusChange = async () => {
+    if (!statusDialogType || !statusDialogStatus || !statusDialogOrder) return;
+
+    if (statusDialogStatus === "delivered") {
+      if (!deliveryOrderId.trim()) {
+        toast.error("Delivery order ID is required for delivered status.");
+        return;
+      }
+      if (!dispatchDate.trim()) {
+        toast.error("Dispatch date is required for delivered status.");
+        return;
+      }
+    }
+    if (statusDialogStatus === "cancelled") {
+      if (!cancellationReason.trim()) {
+        toast.error("Cancellation reason is required for cancelled status.");
+        return;
+      }
+    }
+
+    if (statusDialogType === "single" && statusDialogItem) {
+      await updateSingleItemStatus(
+        statusDialogItem,
+        statusDialogOrder.id,
+        statusDialogStatus,
+        statusDialogStatus === "delivered" ? deliveryOrderId.trim() : null,
+        statusDialogStatus === "cancelled" ? cancellationReason.trim() : null,
+        statusDialogStatus === "delivered" ? dispatchDate : null
+      );
+    } else if (statusDialogType === "bulk") {
+      await updateBulkStatus(
+        statusDialogOrder,
+        statusDialogStatus,
+        statusDialogStatus === "delivered" ? deliveryOrderId.trim() : null,
+        statusDialogStatus === "cancelled" ? cancellationReason.trim() : null,
+        statusDialogStatus === "delivered" ? dispatchDate : null
+      );
+    }
+
+    setStatusDialogOpen(false);
+  };
+
+  const closeStatusDialog = () => {
+    setStatusDialogOpen(false);
+    setStatusDialogType(null);
+    setStatusDialogStatus(null);
+    setStatusDialogOrder(null);
+    setStatusDialogItem(null);
+    setDeliveryOrderId("");
+    setCancellationReason("");
+    setDispatchDate("");
+  };
+
+  // ---------- PDF-FRIENDLY INVOICE HTML ----------
   const generateInvoiceHTML = (order: Order) => {
-    const escapeHtml = (str: string) =>
-      str
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
+    const invoiceDate = new Date(order.created_at).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
 
     const itemsHTML = order.order_items
       .map(
         (item) => `
-        <tr>
-          <td style="padding: 12px; border-bottom: 1px solid #eee;">
-            ${escapeHtml(item.product_name)}
-            ${item.size ? `<br><small>Size: ${escapeHtml(item.size)}</small>` : ""}
-            ${item.color ? `<br><small>Color: ${escapeHtml(item.color)}</small>` : ""}
-          </td>
-          <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
-          <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">₹${item.unit_price.toFixed(2)}</td>
-          <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">₹${item.total_price.toFixed(2)}</td>
-        </tr>
-      `
+      <tr>
+        <td>
+          <strong>${escapeHtml(item.product_name)}</strong><br/>
+          ${
+            item.size
+              ? `<span class="pill">Size: ${escapeHtml(item.size)}</span>`
+              : ""
+          }
+          ${
+            item.color
+              ? `<span class="pill">Color: ${escapeHtml(item.color)}</span>`
+              : ""
+          }
+        </td>
+        <td class="right">${item.quantity}</td>
+        <td class="right">₹${(item.unit_price || 0).toFixed(2)}</td>
+        <td class="right">₹${(item.total_price || 0).toFixed(2)}</td>
+      </tr>`
       )
       .join("");
 
     const designerTotal = order.order_items.reduce(
-      (sum, item) => sum + item.total_price,
+      (s, it) => s + (it.total_price || 0),
       0
     );
 
     return `<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>Designer Invoice - ${order.order_number}</title>
-  <style>
-    body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 40px; background: #f5f5f5; }
-    .invoice-container { max-width: 800px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #333; padding-bottom: 20px; }
-    .logo { font-size: 28px; font-weight: bold; color: #333; }
-    .invoice-title { text-align: right; }
-    .invoice-title h1 { margin: 0; font-size: 24px; color: #333; }
-    .invoice-title p { margin: 5px 0 0; color: #666; }
-    .info-section { display: flex; justify-content: space-between; margin-bottom: 30px; }
-    .info-box { flex: 1; }
-    .info-box h3 { margin: 0 0 10px; font-size: 14px; color: #999; text-transform: uppercase; }
-    .info-box p { margin: 5px 0; color: #333; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-    th { background: #333; color: white; padding: 12px; text-align: left; }
-    th:nth-child(2), th:nth-child(3), th:nth-child(4) { text-align: center; }
-    th:last-child { text-align: right; }
-    .total-section { text-align: right; margin-top: 20px; }
-    .total-row { display: flex; justify-content: flex-end; margin: 8px 0; }
-    .total-label { width: 150px; color: #666; }
-    .total-value { width: 100px; font-weight: bold; }
-    .grand-total { font-size: 20px; color: #333; border-top: 2px solid #333; padding-top: 10px; margin-top: 10px; }
-    .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
-    .badge-pending { background: #fff3cd; color: #856404; }
-    .badge-processing { background: #cce5ff; color: #004085; }
-    .badge-shipped { background: #e2d4f0; color: #6f42c1; }
-    .badge-delivered { background: #d4edda; color: #155724; }
-    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #999; font-size: 12px; }
-    .designer-note { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 20px; }
-    .designer-note h4 { margin: 0 0 10px; color: #333; }
-    .designer-note p { margin: 0; color: #666; font-size: 14px; }
-  </style>
+<meta charset="utf-8" />
+<title>Designer Invoice - ${escapeHtml(order.order_number)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    color: #333;
+    line-height: 1.5;
+    font-size: 12px;
+  }
+  .page {
+    width: 750px;
+    margin: 24px auto 40px;
+  }
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 2px solid #000;
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+  }
+  .logo {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .title-block {
+    text-align: right;
+  }
+  .title-block h1 {
+    margin: 0;
+    font-size: 20px;
+  }
+  .title-block p {
+    margin: 3px 0;
+    font-size: 11px;
+    color: #666;
+  }
+  .section-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 40px;
+    margin-bottom: 18px;
+  }
+  .info-block {
+    font-size: 12px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+  }
+  th {
+    background: #f5f5f5;
+    padding: 10px;
+    border-bottom: 2px solid #ddd;
+    text-align: left;
+    font-weight: 600;
+  }
+  td {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+  }
+  .right { text-align: right; }
+  .pill {
+    display: inline-block;
+    margin: 2px 4px 0 0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #e3f2fd;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .totals {
+    width: 260px;
+    margin-left: auto;
+    margin-top: 16px;
+  }
+  .totals td {
+    border: none;
+    padding: 6px 8px;
+  }
+  .total-row {
+    font-weight: 700;
+    border-top: 2px solid #000;
+    padding-top: 6px;
+  }
+  .footer {
+    margin-top: 28px;
+    font-size: 11px;
+    text-align: center;
+    color: #666;
+    border-top: 1px solid #ddd;
+    padding-top: 10px;
+  }
+</style>
 </head>
 <body>
-  <div class="invoice-container">
+  <div class="page">
     <div class="header">
       <div class="logo">TESORA</div>
-      <div class="invoice-title">
+      <div class="title-block">
         <h1>DESIGNER INVOICE</h1>
-        <p>${order.order_number}</p>
-        <p>${new Date(order.created_at).toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" })}</p>
+        <p>Order #${escapeHtml(order.order_number)}</p>
+        <p>${escapeHtml(invoiceDate)}</p>
       </div>
     </div>
-    
-    <div class="info-section">
-      <div class="info-box">
-        <h3>Order Status</h3>
-        <p><span class="badge badge-${order.status}">${order.status.toUpperCase()}</span></p>
-        <p>Payment: ${order.payment_status}</p>
-      </div>
-      <div class="info-box">
-        <h3>Ship To</h3>
+
+    <div class="info-row">
+      <div>
+        <div class="section-title">Ship To</div>
         ${
           order.shipping_address
-            ? `
-          <p><strong>${escapeHtml(order.shipping_address.full_name)}</strong></p>
-          <p>${escapeHtml(order.shipping_address.address_line1)}</p>
-          ${order.shipping_address.address_line2 ? `<p>${escapeHtml(order.shipping_address.address_line2)}</p>` : ""}
-          <p>${escapeHtml(order.shipping_address.city)}, ${escapeHtml(order.shipping_address.state)} ${escapeHtml(order.shipping_address.postal_code)}</p>
-          <p>Phone: ${escapeHtml(order.shipping_address.phone)}</p>
-        `
-            : "<p>No shipping address</p>"
+            ? `<div class="info-block">
+                <strong>${escapeHtml(order.shipping_address.full_name)}</strong><br/>
+                ${escapeHtml(order.shipping_address.address_line1)}<br/>
+                ${
+                  order.shipping_address.address_line2
+                    ? escapeHtml(order.shipping_address.address_line2) + "<br/>"
+                    : ""
+                }
+                ${escapeHtml(order.shipping_address.city)}, ${escapeHtml(
+                order.shipping_address.state
+              )} ${escapeHtml(order.shipping_address.postal_code)}<br/>
+                Phone: ${escapeHtml(order.shipping_address.phone)}
+              </div>`
+            : `<div class="info-block">No shipping address on record.</div>`
         }
       </div>
+      <div>
+        <div class="section-title">Order Info</div>
+        <div class="info-block">
+          <div>Status: <strong>${escapeHtml(order.status)}</strong></div>
+          <div>Payment: ${escapeHtml(order.payment_status)}</div>
+          <div>Items (your catalog): ${order.order_items.length}</div>
+        </div>
+      </div>
     </div>
-    
+
+    <div class="section-title">Your Line Items</div>
     <table>
       <thead>
         <tr>
-          <th>Product</th>
-          <th>Qty</th>
-          <th>Unit Price</th>
-          <th>Total</th>
+          <th style="width: 50%;">Product</th>
+          <th style="width: 10%;" class="right">Qty</th>
+          <th style="width: 20%;" class="right">Unit</th>
+          <th style="width: 20%;" class="right">Total</th>
         </tr>
       </thead>
       <tbody>
         ${itemsHTML}
       </tbody>
     </table>
-    
-    <div class="total-section">
-      <div class="total-row grand-total">
-        <span class="total-label">Your Products Total:</span>
-        <span class="total-value">₹${designerTotal.toFixed(2)}</span>
-      </div>
-    </div>
-    
-    <div class="designer-note">
-      <h4>📦 Designer Note</h4>
-      <p>This invoice contains only items from your product catalog. Please prepare these items for fulfillment.</p>
-    </div>
-    
+
+    <table class="totals">
+      <tr class="total-row">
+        <td>Your Products Total:</td>
+        <td class="right">₹${designerTotal.toFixed(2)}</td>
+      </tr>
+    </table>
+
     <div class="footer">
-      <p>Generated on ${new Date().toLocaleString("en-IN")} | TESORA Designer Portal</p>
+      This invoice covers only items from your product catalog within this order. Please use this as reference for your records.
     </div>
   </div>
 </body>
 </html>`;
   };
 
+  // ---------- PDF-FRIENDLY PURCHASE ORDER HTML (WITH TESORA DETAILS) ----------
   const generatePurchaseOrderHTML = (order: Order) => {
-    const escapeHtml = (str: string) =>
-      str
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
+    const poDate = new Date(order.created_at).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
 
     const itemsHTML = order.order_items
-      .map(
-        (item) => `
-        <tr>
-          <td style="padding: 12px; border: 1px solid #ddd;">
-            <strong>${escapeHtml(item.product_name)}</strong>
-            ${item.size ? `<br>Size: ${escapeHtml(item.size)}` : ""}
-            ${item.color ? `<br>Color: ${escapeHtml(item.color)}` : ""}
-          </td>
-          <td style="padding: 12px; border: 1px solid #ddd; text-align: center; font-size: 18px; font-weight: bold;">${item.quantity}</td>
-          <td style="padding: 12px; border: 1px solid #ddd;">
-            ${item.product_image ? `<img src="${item.product_image}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px;">` : "No image"}
-          </td>
-        </tr>
-      `
-      )
+      .map((item) => {
+        const imgUrl = safeUrl(item.product_image);
+        const imageCell = item.product_image
+          ? `<img src="${imgUrl}" alt="${escapeHtml(
+              item.product_name
+            )}" style="width:80px;height:80px;object-fit:cover;border-radius:4px;border:1px solid #ddd;display:block;margin-bottom:6px;"/>`
+          : "No image";
+
+        return `
+      <tr>
+        <td>
+          <strong>${escapeHtml(item.product_name)}</strong><br/>
+          ${
+            item.size
+              ? `<span class="pill">Size: ${escapeHtml(item.size)}</span>`
+              : ""
+          }
+          ${
+            item.color
+              ? `<span class="pill">Color: ${escapeHtml(item.color)}</span>`
+              : ""
+          }
+        </td>
+        <td class="center"><strong>${item.quantity}</strong></td>
+        <td class="center">${imageCell}</td>
+      </tr>`;
+      })
       .join("");
+
+    const totalQty = order.order_items.reduce(
+      (sum, i) => sum + (i.quantity || 0),
+      0
+    );
+    const designerTotal = order.order_items.reduce(
+      (s, it) => s + (it.total_price || 0),
+      0
+    );
 
     return `<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>Purchase Order - ${order.order_number}</title>
-  <style>
-    body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 40px; background: #fff; }
-    .container { max-width: 800px; margin: 0 auto; }
-    .header { background: #1a1a1a; color: white; padding: 30px; margin-bottom: 30px; }
-    .header h1 { margin: 0 0 10px; font-size: 28px; }
-    .header p { margin: 0; opacity: 0.8; }
-    .urgent-banner { background: #dc3545; color: white; padding: 15px; text-align: center; font-weight: bold; font-size: 16px; margin-bottom: 20px; }
-    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
-    .info-card { background: #f8f9fa; padding: 20px; border-radius: 8px; }
-    .info-card h3 { margin: 0 0 15px; color: #333; font-size: 14px; text-transform: uppercase; border-bottom: 2px solid #333; padding-bottom: 8px; }
-    .info-card p { margin: 5px 0; color: #333; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-    th { background: #333; color: white; padding: 15px; text-align: left; }
-    .checklist { background: #fff3cd; padding: 20px; border-radius: 8px; margin-top: 30px; }
-    .checklist h3 { margin: 0 0 15px; color: #856404; }
-    .checklist-item { display: flex; align-items: center; margin: 10px 0; }
-    .checkbox { width: 20px; height: 20px; border: 2px solid #333; margin-right: 10px; }
-    .footer { margin-top: 40px; padding-top: 20px; border-top: 2px solid #333; }
-    .signature-line { margin-top: 60px; border-top: 1px solid #333; width: 200px; }
-    .signature-label { font-size: 12px; color: #666; margin-top: 5px; }
-  </style>
+<meta charset="utf-8" />
+<title>Purchase Order - ${escapeHtml(order.order_number)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    color: #333;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .page {
+    width: 750px;
+    margin: 24px auto 40px;
+  }
+  .header {
+    background: #1a1a1a;
+    color: #fff;
+    padding: 18px 20px;
+    margin-bottom: 10px;
+  }
+  .header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: 0.5px;
+  }
+  .header p {
+    margin: 0;
+    font-size: 12px;
+    opacity: 0.9;
+  }
+  .from-block {
+    margin: 8px 0 18px;
+    font-size: 12px;
+  }
+  .from-block strong {
+    font-size: 13px;
+  }
+  .urgent-banner {
+    background: #dc3545;
+    color: #fff;
+    padding: 10px 14px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 13px;
+    border-radius: 4px;
+    margin-bottom: 18px;
+  }
+  .grid {
+    display: flex;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+  .card {
+    flex: 1;
+    background: #f8f9fa;
+    padding: 14px 16px;
+    border-radius: 6px;
+  }
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin: 0 0 8px;
+    border-bottom: 2px solid #333;
+    padding-bottom: 4px;
+  }
+  .card p { margin: 3px 0; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+  }
+  th {
+    background: #333;
+    color: #fff;
+    padding: 10px;
+    text-align: left;
+    font-size: 12px;
+  }
+  td {
+    padding: 10px;
+    border-bottom: 1px solid #ddd;
+    vertical-align: top;
+  }
+  .pill {
+    display: inline-block;
+    margin: 2px 4px 0 0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #fff3cd;
+    font-size: 11px;
+  }
+  .center { text-align: center; }
+  .checklist {
+    margin-top: 20px;
+    padding: 12px 14px;
+    border-radius: 6px;
+    background: #fff3cd;
+  }
+  .checklist h3 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    color: #856404;
+  }
+  .check-item {
+    display: flex;
+    align-items: center;
+    margin: 4px 0;
+    font-size: 12px;
+  }
+  .check-box {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #333;
+    margin-right: 8px;
+  }
+  .footer {
+    margin-top: 24px;
+    padding-top: 10px;
+    border-top: 1px solid #333;
+    font-size: 11px;
+  }
+  .sig-line {
+    width: 200px;
+    border-top: 1px solid #333;
+    margin-top: 26px;
+  }
+  .sig-label {
+    font-size: 10px;
+    color: #666;
+    margin-top: 4px;
+  }
+</style>
 </head>
 <body>
-  <div class="container">
+  <div class="page">
     <div class="header">
-      <h1>�icing PURCHASE ORDER</h1>
-      <p>Order: ${order.order_number} | Date: ${new Date(order.created_at).toLocaleDateString("en-IN")}</p>
+      <h1>PURCHASE ORDER</h1>
+      <p>Order #${escapeHtml(order.order_number)} — ${escapeHtml(poDate)}</p>
     </div>
-    
+
+    <div class="from-block">
+      <strong>From (Seller): Tesora Lifestyle</strong><br/>
+      FC Road, Pune, 411004<br/>
+      Maharashtra, India
+    </div>
+
     <div class="urgent-banner">
-      ⚡ FULFILLMENT REQUIRED - Please prepare items below
+      ⚡ FULFILLMENT REQUIRED — Please prepare the items below from your catalog
     </div>
-    
-    <div class="info-grid">
-      <div class="info-card">
-        <h3>📍 Ship To</h3>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">Ship To (Customer)</div>
         ${
           order.shipping_address
             ? `
           <p><strong>${escapeHtml(order.shipping_address.full_name)}</strong></p>
           <p>${escapeHtml(order.shipping_address.address_line1)}</p>
-          ${order.shipping_address.address_line2 ? `<p>${escapeHtml(order.shipping_address.address_line2)}</p>` : ""}
-          <p>${escapeHtml(order.shipping_address.city)}, ${escapeHtml(order.shipping_address.state)}</p>
-          <p>${escapeHtml(order.shipping_address.postal_code)}, ${escapeHtml(order.shipping_address.country)}</p>
-          <p><strong>📞 ${escapeHtml(order.shipping_address.phone)}</strong></p>
-        `
+          ${
+            order.shipping_address.address_line2
+              ? `<p>${escapeHtml(order.shipping_address.address_line2)}</p>`
+              : ""
+          }
+          <p>${escapeHtml(order.shipping_address.city)}, ${escapeHtml(
+              order.shipping_address.state
+            )}</p>
+          <p>${escapeHtml(order.shipping_address.postal_code)}, ${escapeHtml(
+              order.shipping_address.country
+            )}</p>
+          <p><strong>📞 ${escapeHtml(order.shipping_address.phone)}</strong></p>`
             : "<p>No shipping address provided</p>"
         }
       </div>
-      <div class="info-card">
-        <h3>📋 Order Info</h3>
-        <p>Status: <strong>${order.status.toUpperCase()}</strong></p>
-        <p>Payment: ${order.payment_status}</p>
-        <p>Items: ${order.order_items.length}</p>
-        <p>Total Qty: ${order.order_items.reduce((sum, i) => sum + i.quantity, 0)}</p>
+      <div class="card">
+        <div class="card-title">Order Info</div>
+        <p>Status: <strong>${escapeHtml(order.status.toUpperCase())}</strong></p>
+        <p>Payment: ${escapeHtml(order.payment_status)}</p>
+        <p>Items (your catalog): ${order.order_items.length}</p>
+        <p>Total Qty: ${totalQty}</p>
+        <p>Your Products Total: ₹${designerTotal.toFixed(2)}</p>
       </div>
     </div>
-    
+
     <table>
       <thead>
         <tr>
-          <th>Product Details</th>
-          <th style="text-align: center;">Quantity</th>
-          <th>Reference Image</th>
+          <th style="width:55%;">Product Details</th>
+          <th style="width:10%;text-align:center;">Qty</th>
+          <th style="width:35%;">Reference Image</th>
         </tr>
       </thead>
       <tbody>
         ${itemsHTML}
       </tbody>
     </table>
-    
+
     <div class="checklist">
-      <h3>✅ Fulfillment Checklist</h3>
-      <div class="checklist-item"><div class="checkbox"></div> All items picked and verified</div>
-      <div class="checklist-item"><div class="checkbox"></div> Quality check completed</div>
-      <div class="checklist-item"><div class="checkbox"></div> Properly packed</div>
-      <div class="checklist-item"><div class="checkbox"></div> Shipping label attached</div>
+      <h3>Fulfillment Checklist</h3>
+      <div class="check-item"><div class="check-box"></div> All items picked & counted</div>
+      <div class="check-item"><div class="check-box"></div> Quality check completed</div>
+      <div class="check-item"><div class="check-box"></div> Properly packed & labeled</div>
+      <div class="check-item"><div class="check-box"></div> Ready for dispatch to customer address</div>
     </div>
-    
+
     <div class="footer">
-      <p><strong>Notes:</strong> ${order.notes || "No special instructions"}</p>
-      <div class="signature-line"></div>
-      <p class="signature-label">Prepared By / Date</p>
+      <p><strong>Notes:</strong> ${
+        order.notes ? escapeHtml(order.notes) : "No special instructions"
+      }</p>
+      <div class="sig-line"></div>
+      <div class="sig-label">Prepared By / Date</div>
     </div>
   </div>
 </body>
 </html>`;
   };
 
+  // ---------- PDF DOWNLOAD HELPERS ----------
   const downloadInvoice = (order: Order) => {
-    const html = generateInvoiceHTML(order);
-    const blob = new Blob([html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `designer-invoice-${order.order_number}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success("Invoice downloaded");
+    try {
+      const html = generateInvoiceHTML(order);
+      const opts = pdfOptions(`designer-invoice-${order.order_number}.pdf`);
+      // @ts-ignore
+      html2pdf().set(opts).from(html).save();
+      toast.success("Invoice PDF download started");
+    } catch (err: any) {
+      console.error("downloadInvoice error", err);
+      toast.error("Failed to generate invoice PDF");
+    }
   };
 
   const downloadPurchaseOrder = (order: Order) => {
-    const html = generatePurchaseOrderHTML(order);
-    const blob = new Blob([html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `purchase-order-${order.order_number}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success("Purchase order downloaded");
+    try {
+      const html = generatePurchaseOrderHTML(order);
+      const opts = pdfOptions(`designer-po-${order.order_number}.pdf`);
+      // @ts-ignore
+      html2pdf().set(opts).from(html).save();
+      toast.success("Purchase order PDF download started");
+    } catch (err: any) {
+      console.error("downloadPurchaseOrder error", err);
+      toast.error("Failed to generate purchase order PDF");
+    }
   };
 
   const openDetails = (order: Order) => {
@@ -478,13 +1009,23 @@ const DesignerMyOrders = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b">
+      <header className="border-b mx-auto px-4 py-4 flex items-center justify-between">
         <div className="container mx-auto px-4 py-4 flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/designer/dashboard")}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate("/designer/dashboard")}
+          >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <h1 className="text-2xl font-bold">My Product Orders</h1>
         </div>
+        <Link to="/designer/dashboard">
+          <Button variant="outline">
+            <Home className="mr-2 h-4 w-4" />
+            Dashboard
+          </Button>
+        </Link>
       </header>
 
       <main className="container mx-auto px-4 py-8">
@@ -509,18 +1050,34 @@ const DesignerMyOrders = () => {
                   <TableRow>
                     <TableHead>Order #</TableHead>
                     <TableHead>Date</TableHead>
-                    <TableHead>Status</TableHead>
                     <TableHead>Items</TableHead>
                     <TableHead>Your Total</TableHead>
+                    <TableHead>Item Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {orders.map((order) => {
+                    const totalItems = order.order_items.length;
+                    const deliveredCount = order.order_items.filter(
+                      (i) => i.status === "delivered"
+                    ).length;
+                    const cancelledCount = order.order_items.filter(
+                      (i) => i.status === "cancelled"
+                    ).length;
                     const designerTotal = order.order_items.reduce(
-                      (sum, item) => sum + item.total_price,
+                      (sum, item) => sum + (item.total_price || 0),
                       0
                     );
+
+                    const uniqueStatuses = new Set(
+                      order.order_items.map((i) => i.status || "pending")
+                    );
+                    const bulkStatusValue =
+                      uniqueStatuses.size === 1
+                        ? Array.from(uniqueStatuses)[0]
+                        : "mixed";
+
                     return (
                       <TableRow key={order.id}>
                         <TableCell className="font-medium">
@@ -530,12 +1087,39 @@ const DesignerMyOrders = () => {
                           {new Date(order.created_at).toLocaleDateString()}
                         </TableCell>
                         <TableCell>
-                          <Badge className={statusColors[order.status] || ""}>
-                            {order.status}
-                          </Badge>
+                          <div className="flex flex-col text-sm">
+                            <span>{totalItems} item(s)</span>
+                            <span className="text-xs text-muted-foreground">
+                              {deliveredCount} delivered
+                              {cancelledCount > 0 &&
+                                ` • ${cancelledCount} cancelled`}
+                            </span>
+                          </div>
                         </TableCell>
-                        <TableCell>{order.order_items.length} items</TableCell>
                         <TableCell>₹{designerTotal.toFixed(2)}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-xs text-muted-foreground">
+                              Set Status
+                            </span>
+                            <select
+                              className="border rounded px-2 py-1 text-xs bg-background"
+                              value={bulkStatusValue}
+                              onChange={(e) =>
+                                handleBulkStatusSelect(order, e.target.value)
+                              }
+                            >
+                              {bulkStatusValue === "mixed" && (
+                                <option value="mixed" disabled>
+                                  Mixed
+                                </option>
+                              )}
+                              <option value="pending">Pending</option>
+                              <option value="delivered">Delivered</option>
+                              <option value="cancelled">Cancelled</option>
+                            </select>
+                          </div>
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button
@@ -646,6 +1230,50 @@ const DesignerMyOrders = () => {
                           Qty: {item.quantity} × ₹{item.unit_price} = ₹
                           {item.total_price}
                         </p>
+                        <p className="text-xs mt-1">
+                          Item Status:{" "}
+                          <span className="font-semibold">
+                            {item.status || "pending"}
+                          </span>
+                        </p>
+                        {item.status === "delivered" &&
+                          item.delivery_order_id && (
+                            <p className="text-xs text-muted-foreground">
+                              Delivery Order ID: {item.delivery_order_id}
+                            </p>
+                          )}
+                        {item.status === "delivered" && item.dispatch_date && (
+                          <p className="text-xs text-muted-foreground">
+                            Dispatch Date: {item.dispatch_date}
+                          </p>
+                        )}
+                        {item.status === "cancelled" &&
+                          item.cancellation_reason && (
+                            <p className="text-xs text-muted-foreground">
+                              Cancellation Reason: {item.cancellation_reason}
+                            </p>
+                          )}
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1">
+                        <label className="text-xs text-muted-foreground">
+                          Update Status
+                        </label>
+                        <select
+                          className="border rounded px-2 py-1 text-xs bg-background"
+                          value={item.status || "pending"}
+                          onChange={(e) =>
+                            handleItemStatusSelect(
+                              item,
+                              selectedOrder,
+                              e.target.value
+                            )
+                          }
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="delivered">Delivered</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
                       </div>
                     </div>
                   ))}
@@ -657,7 +1285,7 @@ const DesignerMyOrders = () => {
                 <span className="text-xl font-bold">
                   ₹
                   {selectedOrder.order_items
-                    .reduce((sum, item) => sum + item.total_price, 0)
+                    .reduce((sum, item) => sum + (item.total_price || 0), 0)
                     .toFixed(2)}
                 </span>
               </div>
@@ -677,6 +1305,81 @@ const DesignerMyOrders = () => {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Status Modal for Delivered / Cancelled */}
+      <Dialog
+        open={statusDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeStatusDialog();
+          } else {
+            setStatusDialogOpen(true);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {statusDialogStatus === "delivered"
+                ? "Mark as Delivered"
+                : "Cancel Item(s)"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {statusDialogStatus === "delivered" && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Please enter the courier / delivery order ID and dispatch date
+                for this shipment.
+              </p>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Delivery / AWB / Tracking ID
+                </label>
+                <Input
+                  placeholder="e.g. BLR12345XYZ"
+                  value={deliveryOrderId}
+                  onChange={(e) => setDeliveryOrderId(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Dispatch Date</label>
+                <Input
+                  type="date"
+                  value={dispatchDate}
+                  onChange={(e) => setDispatchDate(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
+          {statusDialogStatus === "cancelled" && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Please add a clear reason for cancelling this item/order.
+              </p>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Cancellation Reason
+                </label>
+                <Textarea
+                  placeholder="e.g. Out of stock, quality issue, damaged piece, etc."
+                  value={cancellationReason}
+                  onChange={(e) => setCancellationReason(e.target.value)}
+                  rows={4}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={closeStatusDialog}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmStatusChange}>Confirm</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

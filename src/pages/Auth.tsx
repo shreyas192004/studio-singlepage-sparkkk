@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Sparkles, Mail, Lock, ArrowRight, ShoppingBag, Zap, Shield, TrendingUp } from "lucide-react";
+import { Sparkles, Mail, Lock, ArrowRight, ShoppingBag, Zap, Shield, TrendingUp, ArrowLeft } from "lucide-react";
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -88,12 +88,15 @@ const Auth = () => {
   const handleGoogle = async () => {
     setLoading(true);
     try {
-      const { error } = await signInWithGoogle();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/ai-generator`,
+        },
+      });
+
       if (error) {
         toast.error(error.message ?? "Google sign-in failed");
-      } else {
-        toast.info('Redirecting to Google...');
-        // The redirect happens automatically, no further action here.
       }
     } catch (err) {
       toast.error("Google sign-in error");
@@ -102,6 +105,7 @@ const Auth = () => {
       setLoading(false);
     }
   };
+
 
   const benefits = [
     {
@@ -175,6 +179,17 @@ const Auth = () => {
       <div className="flex-1 flex items-center justify-center p-8 relative z-10">
         <Card className="w-full max-w-md p-8 shadow-2xl border-2 border-border/50 backdrop-blur-sm bg-card/95 animate-scale-in">
           <div className="space-y-6">
+
+            {/* ✅ Back to Home (ABOVE Join 10,000+ Creators) */}
+            <div>
+              <button
+                onClick={() => navigate("/")}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-accent transition"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Home
+              </button>
+            </div>
             <div className="text-center space-y-2">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent shadow-lg mb-4 animate-scale-in" style={{ animationDelay: "0.2s" }}>
                 <Sparkles className="w-8 h-8 text-primary-foreground" />
@@ -189,10 +204,10 @@ const Auth = () => {
 
             {/* Google button */}
             <div className="space-y-3">
-              <Button onClick={handleGoogle} className="w-full h-12 flex items-center justify-center gap-3 border border-border/50 bg-card/80 hover:scale-105">
+              <button onClick={handleGoogle} className="w-full h-12 flex items-center justify-center gap-3 border border-border/50 bg-card/80 hover:scale-105">
                 <img src="https://www.svgrepo.com/show/355037/google.svg" alt="Google" className="w-5 h-5" />
                 Continue with Google
-              </Button>
+              </button>
               <div className="relative">
                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
                 <div className="relative flex justify-center text-sm"><span className="px-4 bg-card text-muted-foreground">or sign in with email</span></div>
@@ -231,11 +246,6 @@ const Auth = () => {
                     <Label htmlFor="password" className="flex items-center gap-2 text-foreground">
                       <Lock className="w-4 h-4" /> Password
                     </Label>
-                    {isLogin && (
-                      <Button type="button" variant="link" className="text-xs p-0 h-auto" onClick={() => setIsForgotPassword(true)}>
-                        Forgot password?
-                      </Button>
-                    )}
                   </div>
                   <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 text-base" disabled={loading} required minLength={6} />
                 </div>

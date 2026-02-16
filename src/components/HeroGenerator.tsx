@@ -14,16 +14,16 @@ const HeroGenerator = () => {
     }
   };
 
-  return (
-    <div className="bg-gradient-to-br from-primary to-primary/80 rounded-2xl p-8 shadow-2xl border border-primary-foreground/10">
-      <div className="flex items-center gap-2 mb-4">
+  // return (
+    // <div className="bg-gradient-to-br from-primary to-primary/80 rounded-2xl p-8 shadow-2xl border border-primary-foreground/10">
+      {/* <div className="flex items-center gap-2 mb-4">
         <Sparkles className="w-6 h-6 text-accent" />
         <h3 className="text-2xl font-bold text-primary-foreground">AI Design Generator</h3>
-      </div>
-      <p className="text-primary-foreground/80 mb-6">
+      </div> */}
+      {/* <p className="text-primary-foreground/80 mb-6">
         Describe your dream t-shirt design and watch AI bring it to life instantly
-      </p>
-      <div className="flex gap-3">
+      </p> */}
+      {/* <div className="flex gap-3">
         <Input
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -38,9 +38,9 @@ const HeroGenerator = () => {
         >
           Generate
         </Button>
-      </div>
-    </div>
-  );
+      </div> */}
+    // </div>
+  // );
 };
 
 export default HeroGenerator;

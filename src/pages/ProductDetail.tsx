@@ -11,6 +11,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CartSidebar } from "@/components/CartSidebar";
+import Logo from "../../public/logo.png";
 
 interface Review {
   id: string;
@@ -21,6 +22,7 @@ interface Review {
   created_at: string;
   user_display_name?: string | null;
   user_email?: string | null;
+  image_url?: string | null;
 }
 
 const ProductDetail = () => {
@@ -29,6 +31,7 @@ const ProductDetail = () => {
   const { addToCart, cartCount } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
   const { user } = useAuth();
+
   const [cartOpen, setCartOpen] = useState(false);
   const [product, setProduct] = useState<any>(null);
   const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
@@ -45,6 +48,10 @@ const ProductDetail = () => {
   const [newReviewComment, setNewReviewComment] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
 
+  // Review image upload
+  const [reviewImageFile, setReviewImageFile] = useState<File | null>(null);
+  const [reviewImagePreview, setReviewImagePreview] = useState<string | null>(null);
+
   // Live viewer count (4-12)
   const [viewers, setViewers] = useState<number>(() => Math.floor(Math.random() * 9) + 4);
 
@@ -52,6 +59,7 @@ const ProductDetail = () => {
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [bulkModalProduct, setBulkModalProduct] = useState<any | null>(null);
 
+  // Live viewers animation CSS
   useEffect(() => {
     const id = "product-viewers-animate-css";
     if (!document.getElementById(id)) {
@@ -76,6 +84,7 @@ const ProductDetail = () => {
     return () => clearTimeout(timeoutId);
   }, []);
 
+  // Fetch product + related
   useEffect(() => {
     const fetchProduct = async () => {
       try {
@@ -114,6 +123,7 @@ const ProductDetail = () => {
     }
   }, [id]);
 
+  // Fetch reviews
   useEffect(() => {
     const fetchReviews = async () => {
       if (!id) return;
@@ -127,16 +137,15 @@ const ProductDetail = () => {
 
         if (error) throw error;
 
-        // Fetch user profiles separately
         if (reviewsData && reviewsData.length > 0) {
-          const userIds = reviewsData.map(r => r.user_id);
+          const userIds = reviewsData.map((r: any) => r.user_id);
           const { data: profiles } = await supabase
             .from("profiles")
             .select("user_id, display_name, email")
             .in("user_id", userIds);
 
-          const enrichedReviews = reviewsData.map(review => {
-            const profile = profiles?.find(p => p.user_id === review.user_id);
+          const enrichedReviews: Review[] = reviewsData.map((review: any) => {
+            const profile = profiles?.find((p: any) => p.user_id === review.user_id);
             return {
               ...review,
               user_display_name: profile?.display_name,
@@ -158,6 +167,40 @@ const ProductDetail = () => {
     fetchReviews();
   }, [id]);
 
+  const uploadReviewImageIfNeeded = async (): Promise<string | null> => {
+    if (!reviewImageFile) return null;
+
+    const ext = reviewImageFile.name.split(".").pop();
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const filePath = `reviews/${fileName}`;
+
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from("review-images")
+      .upload(filePath, reviewImageFile, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error("Review image upload error:", uploadError);
+      throw new Error("Failed to upload review image");
+    }
+
+    const path = uploadData?.path ?? filePath;
+
+    const { data: publicUrlData } = supabase.storage
+      .from("review-images")
+      .getPublicUrl(path);
+
+    const publicUrl = publicUrlData.publicUrl;
+
+    if (!publicUrl) {
+      throw new Error("Could not get public URL for review image");
+    }
+
+    return publicUrl;
+  };
+
   const handleSubmitReview = async () => {
     if (!user) {
       toast.error("Please login to submit a review");
@@ -177,6 +220,16 @@ const ProductDetail = () => {
 
     try {
       setSubmittingReview(true);
+
+      let imageUrl: string | null = null;
+      try {
+        imageUrl = await uploadReviewImageIfNeeded();
+      } catch (err: any) {
+        toast.error(err.message || "Failed to upload review image");
+        setSubmittingReview(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from("reviews")
         .insert({
@@ -184,20 +237,20 @@ const ProductDetail = () => {
           user_id: user.id,
           rating: newReviewRating,
           comment: newReviewComment.trim(),
+          image_url: imageUrl,
         })
         .select("*")
         .single();
 
       if (error) throw error;
 
-      // Fetch user profile for the new review
       const { data: profile } = await supabase
         .from("profiles")
         .select("display_name, email")
         .eq("user_id", user.id)
         .single();
 
-      const enrichedReview = {
+      const enrichedReview: Review = {
         ...data,
         user_display_name: profile?.display_name,
         user_email: profile?.email,
@@ -206,6 +259,8 @@ const ProductDetail = () => {
       setReviews([enrichedReview, ...reviews]);
       setNewReviewComment("");
       setNewReviewRating(5);
+      setReviewImageFile(null);
+      setReviewImagePreview(null);
       toast.success("Review submitted successfully!");
     } catch (error: any) {
       console.error("Error submitting review:", error);
@@ -355,7 +410,11 @@ const ProductDetail = () => {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <Link to="/" className="text-xl font-bold tracking-wider">
-              TESORA
+             <img
+                className="w-24 h-10 object-contain cursor-pointer"
+                src={Logo}
+                alt="Tesora Logo"
+              />
             </Link>
             <div className="hidden md:flex items-center gap-8">
               <Link to="/" className="hover:text-accent transition-colors">
@@ -458,7 +517,12 @@ const ProductDetail = () => {
                   <div className="text-sm text-muted-foreground">{reviews.length} reviews</div>
                 </div>
                 <div>
-                  <Button variant="ghost" onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })}>
+                  <Button
+                    variant="ghost"
+                    onClick={() =>
+                      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })
+                    }
+                  >
                     Read all reviews
                   </Button>
                 </div>
@@ -520,7 +584,11 @@ const ProductDetail = () => {
                 <Button variant="outline" size="icon" onClick={handleIncreaseQuantity}>
                   <Plus className="w-4 h-4" />
                 </Button>
-                {quantity >= 9 && <span className="text-xs text-muted-foreground ml-2">Max 9 — for bulk orders contact sales</span>}
+                {quantity >= 9 && (
+                  <span className="text-xs text-muted-foreground ml-2">
+                    Max 9 — for bulk orders contact sales
+                  </span>
+                )}
               </div>
             </div>
 
@@ -547,15 +615,17 @@ const ProductDetail = () => {
 
           {/* Add Review Form */}
           {user ? (
-            <div className="mb-8 p-6 border rounded-lg bg-card">
+            <div className="mb-8 p-6 border rounded-lg bg-card shadow-sm">
               <h3 className="text-xl font-semibold mb-4">Write a Review</h3>
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div>
                   <Label className="mb-2 block">Your Rating</Label>
                   {renderInteractiveStars(newReviewRating, setNewReviewRating)}
                 </div>
                 <div>
-                  <Label htmlFor="review-comment" className="mb-2 block">Your Review</Label>
+                  <Label htmlFor="review-comment" className="mb-2 block">
+                    Your Review
+                  </Label>
                   <Textarea
                     id="review-comment"
                     placeholder="Share your thoughts about this product..."
@@ -567,6 +637,39 @@ const ProductDetail = () => {
                   <div className="text-xs text-muted-foreground mt-1">
                     {newReviewComment.length}/1000 characters
                   </div>
+                </div>
+                <div>
+                  <Label htmlFor="review-image" className="mb-2 block">
+                    Add a photo (optional)
+                  </Label>
+                  <input
+                    id="review-image"
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      setReviewImageFile(file);
+                      if (file) {
+                        const url = URL.createObjectURL(file);
+                        setReviewImagePreview(url);
+                      } else {
+                        setReviewImagePreview(null);
+                      }
+                    }}
+                    className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                  />
+                  {reviewImagePreview && (
+                    <div className="mt-3">
+                      <p className="text-xs text-muted-foreground mb-1">Preview</p>
+                      <div className="w-32 h-32 rounded-md overflow-hidden border">
+                        <img
+                          src={reviewImagePreview}
+                          alt="Review preview"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <Button onClick={handleSubmitReview} disabled={submittingReview}>
                   {submittingReview ? "Submitting..." : "Submit Review"}
@@ -590,7 +693,7 @@ const ProductDetail = () => {
           ) : (
             <div className="space-y-4">
               {reviews.map((r) => (
-                <div key={r.id} className="p-4 border rounded-lg">
+                <div key={r.id} className="p-4 border rounded-lg bg-card/50">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-3">
@@ -606,6 +709,17 @@ const ProductDetail = () => {
                     </div>
                   </div>
                   <p className="mt-3 text-sm text-muted-foreground">{r.comment}</p>
+                  {r.image_url && (
+                    <div className="mt-3">
+                      <div className="w-32 h-32 rounded-md overflow-hidden border">
+                        <img
+                          src={r.image_url}
+                          alt="Customer review"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -653,9 +767,15 @@ const ProductDetail = () => {
               For orders of 10+ items, please contact our sales team for special pricing and shipping options.
             </p>
             <div className="space-y-2 mb-6 text-sm">
-              <p><strong>Email:</strong> sales@tesora.com</p>
-              <p><strong>Phone:</strong> +91 98765 43210</p>
-              <p><strong>WhatsApp:</strong> +91 98765 43210</p>
+              <p>
+                <strong>Email:</strong> sales@tesora.com
+              </p>
+              <p>
+                <strong>Phone:</strong> +91 98765 43210
+              </p>
+              <p>
+                <strong>WhatsApp:</strong> +91 98765 43210
+              </p>
             </div>
             <div className="flex gap-3">
               <Button onClick={handleContactSales} className="flex-1">

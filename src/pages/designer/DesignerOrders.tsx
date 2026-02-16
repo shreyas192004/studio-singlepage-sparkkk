@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +30,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Download, Eye, Search } from "lucide-react";
+import { ArrowLeft, Download, Eye, Home, Search } from "lucide-react";
 import { toast } from "sonner";
 
 interface OrderItem {
@@ -322,8 +322,8 @@ const DesignerOrders = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4">
+      <header className="border-b flex items-center justify-between mx-auto px-4 py-4">
+        <div className="container ">
           <div className="flex items-center gap-4">
             <Button variant="ghost" onClick={() => navigate("/designer/dashboard")}>
               <ArrowLeft className="h-4 w-4" />
@@ -331,6 +331,12 @@ const DesignerOrders = () => {
             <h1 className="text-2xl font-bold">My Products & Sales</h1>
           </div>
         </div>
+        <Link to="/designer/dashboard">
+          <Button variant="outline">
+            <Home className="mr-2 h-4 w-4" />
+            Dashboard
+          </Button>
+        </Link>
       </header>
 
       <main className="container mx-auto px-4 py-8">
