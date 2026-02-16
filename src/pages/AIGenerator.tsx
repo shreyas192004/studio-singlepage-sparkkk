@@ -1402,59 +1402,46 @@ export default function AIGenerator() {
                 {generatedImage && !isGenerating && (
                   <div className="relative w-full h-full flex flex-col items-center justify-center animate-in fade-in zoom-in duration-500">
                     
-                    {/* Flip card container */}
+                    {/* Preview container */}
                     <div
-                      className="relative w-full max-w-[520px] aspect-[3/4] cursor-pointer"
-                      style={{ perspective: "1200px" }}
+                      className="relative w-full max-w-[520px] aspect-[3/4] rounded-2xl overflow-hidden shadow-xl bg-muted/20 group cursor-pointer"
+                      onClick={() => setShowLargeModal(true)}
                     >
-                      <div
-                        className="relative w-full h-full transition-transform duration-700"
+                      {/* Mockup image - always visible */}
+                      <img
+                        src={generatedImage}
+                        alt="AI Generated Mockup"
+                        className="absolute inset-0 w-full h-full object-contain transition-all duration-700"
                         style={{
-                          transformStyle: "preserve-3d",
-                          transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
+                          opacity: isFlipped ? 0 : 1,
+                          transform: isFlipped ? "scale(0.95)" : "scale(1)",
                         }}
-                      >
-                        {/* FRONT - Full Mockup */}
-                        <div
-                          className="absolute inset-0 rounded-2xl overflow-hidden shadow-xl bg-muted/20 group"
-                          style={{ backfaceVisibility: "hidden" }}
-                          onClick={() => setShowLargeModal(true)}
-                        >
-                          <img
-                            src={generatedImage}
-                            alt="AI Generated Mockup"
-                            className="absolute inset-0 w-full h-full object-contain transition-transform duration-700 group-hover:scale-105"
-                            crossOrigin="anonymous"
-                          />
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
-                          <div className="absolute top-3 left-3 bg-card/80 backdrop-blur-sm text-xs font-medium px-2.5 py-1 rounded-full border border-border">
-                            👕 Mockup Preview
-                          </div>
-                        </div>
+                        crossOrigin="anonymous"
+                      />
 
-                        {/* BACK - Isolated Artwork */}
-                        <div
-                          className="absolute inset-0 rounded-2xl overflow-hidden shadow-xl bg-white group"
-                          style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
-                          onClick={() => setShowLargeModal(true)}
-                        >
-                          {artworkImage ? (
-                            <img
-                              src={artworkImage}
-                              alt="Isolated Artwork"
-                              className="absolute inset-0 w-full h-full object-contain p-6 transition-transform duration-700 group-hover:scale-105"
-                              crossOrigin="anonymous"
-                            />
-                          ) : (
-                            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                              <p className="text-sm">Artwork not available</p>
-                            </div>
-                          )}
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
-                          <div className="absolute top-3 left-3 bg-card/80 backdrop-blur-sm text-xs font-medium px-2.5 py-1 rounded-full border border-border">
-                            🎨 Print-Ready Artwork
-                          </div>
+                      {/* Artwork zoom - shown when "View Artwork" is active */}
+                      {artworkImage && (
+                        <img
+                          src={artworkImage}
+                          alt="Isolated Artwork"
+                          className="absolute inset-0 w-full h-full object-contain p-4 transition-all duration-700"
+                          style={{
+                            opacity: isFlipped ? 1 : 0,
+                            transform: isFlipped ? "scale(1)" : "scale(0.7)",
+                          }}
+                          crossOrigin="anonymous"
+                        />
+                      )}
+
+                      {!artworkImage && isFlipped && (
+                        <div className="absolute inset-0 flex items-center justify-center text-muted-foreground bg-white">
+                          <p className="text-sm">Artwork not available</p>
                         </div>
+                      )}
+
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
+                      <div className="absolute top-3 left-3 bg-card/80 backdrop-blur-sm text-xs font-medium px-2.5 py-1 rounded-full border border-border">
+                        {isFlipped ? "🎨 Print-Ready Artwork" : "👕 Mockup Preview"}
                       </div>
                     </div>
 
