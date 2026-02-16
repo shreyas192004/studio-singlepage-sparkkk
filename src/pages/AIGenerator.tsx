@@ -300,7 +300,6 @@ export default function AIGenerator() {
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [artworkImage, setArtworkImage] = useState<string | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [isZoomed, setIsZoomed] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationCount, setGenerationCount] = useState(0);
   const [designText, setDesignText] = useState("");
@@ -442,7 +441,6 @@ export default function AIGenerator() {
     setGeneratedImage(null);
     setArtworkImage(null);
     setIsFlipped(false);
-    setIsZoomed(false);
     setDesignRecord(null);
 
     try {
@@ -521,11 +519,6 @@ export default function AIGenerator() {
       }
       // Edge function returned 200 but with an error message (soft fail for content issues)
       if (data?.error) {
-        // Clear previous state — keep card on mockup side
-        setGeneratedImage(null);
-        setArtworkImage(null);
-        setIsFlipped(false);
-        setIsZoomed(false);
         toast.info(data.error);
         return;
       }
@@ -533,8 +526,7 @@ export default function AIGenerator() {
 
       setGeneratedImage(data.imageUrl);
       setArtworkImage(data.artworkUrl || null);
-      setIsFlipped(false);
-      setIsZoomed(false);
+      setIsFlipped(false); // Always show mockup first after new generation
 
       // ---------------------------------------------------------
       // 💾 CLIENT-SIDE PERSISTENCE (Bypass Edge Function DB insert)
@@ -1425,32 +1417,19 @@ export default function AIGenerator() {
                         {/* FRONT - Full Mockup */}
                         <div
                           className="absolute inset-0 rounded-2xl overflow-hidden shadow-xl bg-muted/20 group"
-                          style={{
-                            backfaceVisibility: "hidden",
-                            transition: "transform 400ms ease",
-                            transform: isZoomed
-                              ? (() => {
-                                  // Zoom into design area based on placement
-                                  if (imagePosition === "back") return "scale(2.2) translateY(10%)";
-                                  // front / left-chest default
-                                  return "scale(2.2) translateY(5%)";
-                                })()
-                              : "scale(1)",
-                          }}
+                          style={{ backfaceVisibility: "hidden" }}
                           onClick={() => setShowLargeModal(true)}
                         >
                           <img
                             src={generatedImage}
                             alt="AI Generated Mockup"
-                            className="absolute inset-0 w-full h-full object-contain"
+                            className="absolute inset-0 w-full h-full object-contain transition-transform duration-700 group-hover:scale-105"
                             crossOrigin="anonymous"
                           />
                           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
-                          {!isZoomed && (
-                            <div className="absolute top-3 left-3 bg-card/80 backdrop-blur-sm text-xs font-medium px-2.5 py-1 rounded-full border border-border">
-                              👕 Mockup Preview
-                            </div>
-                          )}
+                          <div className="absolute top-3 left-3 bg-card/80 backdrop-blur-sm text-xs font-medium px-2.5 py-1 rounded-full border border-border">
+                            👕 Mockup Preview
+                          </div>
                         </div>
 
                         {/* BACK - Isolated Artwork */}
@@ -1481,57 +1460,43 @@ export default function AIGenerator() {
 
                     {/* CONTROLS */}
                     <div className="mt-6 flex flex-wrap items-center justify-center gap-3 animate-in slide-in-from-bottom-2 fade-in duration-700 delay-300">
-                      {/* Zoom into design area on mockup */}
+                      {/* Flip button */}
                       <Button
                         variant="outline"
                         size="sm"
                         className="shadow-sm border"
-                        disabled={isFlipped}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (!isFlipped) setIsZoomed((z) => !z);
-                        }}
-                      >
-                        <Search className="w-4 h-4 mr-2" />
-                        {isZoomed ? "Zoom Out" : "View Artwork"}
-                      </Button>
-
-                      {/* Flip to isolated artwork */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="shadow-sm border"
-                        disabled={!artworkImage}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!artworkImage) return;
-                          setIsZoomed(false);
-                          setIsFlipped((f) => !f);
+                          setIsFlipped(!isFlipped);
                         }}
                       >
                         <RotateCcw className="w-4 h-4 mr-2" />
-                        {isFlipped ? "View Mockup" : "Preview"}
+                        {isFlipped ? "View Mockup" : "View Artwork"}
                       </Button>
 
-                      {/* Download — always downloads artwork only */}
+                      {/* Download */}
                       <Button
                         variant="secondary"
                         size="sm"
                         className="shadow-sm border"
-                        disabled={!artworkImage}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (!artworkImage) return;
+                          const url = isFlipped && artworkImage ? artworkImage : generatedImage;
                           const link = document.createElement("a");
-                          link.href = artworkImage;
-                          link.download = `ai-artwork-${Date.now()}.png`;
+                          link.href = url;
+                          link.download = `ai-${isFlipped ? "artwork" : "mockup"}-${Date.now()}.png`;
                           document.body.appendChild(link);
                           link.click();
                           document.body.removeChild(link);
                         }}
                       >
                         <Download className="w-4 h-4 mr-2" />
-                        Download Artwork
+                        {isFlipped ? "Download Artwork" : "Download Mockup"}
+                      </Button>
+
+                      <Button variant="outline" size="sm" onClick={() => setShowLargeModal(true)}>
+                        <Eye className="w-4 h-4 mr-2" />
+                        Preview
                       </Button>
                     </div>
                   </div>
