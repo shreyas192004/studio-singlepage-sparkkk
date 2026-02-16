@@ -23,7 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Home, Download, ArrowLeft } from "lucide-react";
+import { Home, Download, ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 /* -------------------- Types -------------------- */
@@ -49,12 +49,15 @@ const AdminAnalytics = () => {
   const { isAdmin, loading } = useAdmin();
   const navigate = useNavigate();
 
-  const [stats, setStats] = useState<AnalyticsStats>({
+const [stats, setStats] = useState<AnalyticsStats>({
     aiGenerations: [],
   });
 
   const [isLoading, setIsLoading] = useState(true);
   const [selectedGen, setSelectedGen] = useState<AiGeneration | null>(null);
+  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 50;
 
   /* -------------------- Auth Guard -------------------- */
 
@@ -66,27 +69,37 @@ const AdminAnalytics = () => {
 
   useEffect(() => {
     if (isAdmin) fetchAnalytics();
-  }, [isAdmin]);
+  }, [isAdmin, page]);
 
   /* -------------------- Fetch AI Analytics -------------------- */
 
   const fetchAnalytics = async () => {
     try {
-      // Exclude image_url from list query — base64 values can be 60MB+ and break JSON parsing
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      // Get total count
+      const { count } = await (supabase as any)
+        .from("ai_generations_with_email")
+        .select("id", { count: "exact", head: true });
+      
+      if (count !== null) setTotalCount(count);
+
       const { data: generations, error } = await (supabase as any)
         .from("ai_generations_with_email")
         .select("id, prompt, style, color_scheme, session_id, created_at, email")
         .order("created_at", { ascending: false })
-        .limit(50);
+        .range(from, to);
 
       if (error) {
         console.warn("View query failed, falling back to direct table query:", error.message);
-        const { data: fallbackData } = await supabase
+        const { data: fallbackData, count: fbCount } = await supabase
           .from("ai_generations")
-          .select("id, prompt, style, color_scheme, session_id, created_at, user_id")
+          .select("id, prompt, style, color_scheme, session_id, created_at, user_id", { count: "exact" })
           .order("created_at", { ascending: false })
-          .limit(50);
+          .range(from, to);
 
+        if (fbCount !== null) setTotalCount(fbCount);
         setStats({
           aiGenerations: (fallbackData || []).map((g: any) => ({ ...g, email: null, image_url: null })),
         });
@@ -201,9 +214,9 @@ const AdminAnalytics = () => {
         {/* ---------------- AI Generations ---------------- */}
         <Card>
           <CardHeader className="flex flex-row justify-between items-center">
-            <CardTitle>AI Design Generations</CardTitle>
+            <CardTitle>AI Design Generations {totalCount > 0 && <span className="text-sm font-normal text-muted-foreground ml-2">({totalCount} total)</span>}</CardTitle>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => { setIsLoading(true); fetchAnalytics(); }}>
+              <Button size="sm" variant="outline" onClick={() => { setPage(0); setIsLoading(true); fetchAnalytics(); }}>
                 Retry
               </Button>
               <Button size="sm" variant="outline" onClick={exportAIGenerationsCSV}>
@@ -246,6 +259,33 @@ const AdminAnalytics = () => {
                 ))}
               </TableBody>
             </Table>
+
+            {/* Pagination */}
+            {totalCount > PAGE_SIZE && (
+              <div className="flex items-center justify-between pt-4">
+                <span className="text-sm text-muted-foreground">
+                  Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalCount)} of {totalCount}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page === 0}
+                    onClick={() => setPage((p) => p - 1)}
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={(page + 1) * PAGE_SIZE >= totalCount}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    Next <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </main>
