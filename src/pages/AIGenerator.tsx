@@ -1407,47 +1407,23 @@ export default function AIGenerator() {
                       className="relative w-full max-w-[520px] aspect-[3/4] rounded-2xl overflow-hidden shadow-xl bg-muted/20 group cursor-pointer"
                       onClick={() => setShowLargeModal(true)}
                     >
-                      {/* Mockup image - always visible */}
                       <img
                         src={generatedImage}
                         alt="AI Generated Mockup"
-                        className="absolute inset-0 w-full h-full object-contain transition-all duration-700"
+                        className="absolute inset-0 w-full h-full object-contain transition-all duration-700 ease-in-out origin-[50%_35%]"
                         style={{
-                          opacity: isFlipped ? 0 : 1,
-                          transform: isFlipped ? "scale(0.95)" : "scale(1)",
+                          transform: isFlipped ? "scale(2.2)" : "scale(1)",
                         }}
                         crossOrigin="anonymous"
                       />
-
-                      {/* Artwork zoom - shown when "View Artwork" is active */}
-                      {artworkImage && (
-                        <img
-                          src={artworkImage}
-                          alt="Isolated Artwork"
-                          className="absolute inset-0 w-full h-full object-contain p-4 transition-all duration-700"
-                          style={{
-                            opacity: isFlipped ? 1 : 0,
-                            transform: isFlipped ? "scale(1)" : "scale(0.7)",
-                          }}
-                          crossOrigin="anonymous"
-                        />
-                      )}
-
-                      {!artworkImage && isFlipped && (
-                        <div className="absolute inset-0 flex items-center justify-center text-muted-foreground bg-white">
-                          <p className="text-sm">Artwork not available</p>
-                        </div>
-                      )}
-
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
                       <div className="absolute top-3 left-3 bg-card/80 backdrop-blur-sm text-xs font-medium px-2.5 py-1 rounded-full border border-border">
-                        {isFlipped ? "🎨 Print-Ready Artwork" : "👕 Mockup Preview"}
+                        {isFlipped ? "🔍 Design Close-up" : "👕 Mockup Preview"}
                       </div>
                     </div>
 
                     {/* CONTROLS */}
                     <div className="mt-6 flex flex-wrap items-center justify-center gap-3 animate-in slide-in-from-bottom-2 fade-in duration-700 delay-300">
-                      {/* Flip button */}
                       <Button
                         variant="outline"
                         size="sm"
@@ -1457,28 +1433,26 @@ export default function AIGenerator() {
                           setIsFlipped(!isFlipped);
                         }}
                       >
-                        <RotateCcw className="w-4 h-4 mr-2" />
-                        {isFlipped ? "View Mockup" : "View Artwork"}
+                        {isFlipped ? <RotateCcw className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
+                        {isFlipped ? "Full View" : "Zoom Design"}
                       </Button>
 
-                      {/* Download */}
                       <Button
                         variant="secondary"
                         size="sm"
                         className="shadow-sm border"
                         onClick={(e) => {
                           e.stopPropagation();
-                          const url = isFlipped && artworkImage ? artworkImage : generatedImage;
                           const link = document.createElement("a");
-                          link.href = url;
-                          link.download = `ai-${isFlipped ? "artwork" : "mockup"}-${Date.now()}.png`;
+                          link.href = generatedImage!;
+                          link.download = `ai-mockup-${Date.now()}.png`;
                           document.body.appendChild(link);
                           link.click();
                           document.body.removeChild(link);
                         }}
                       >
                         <Download className="w-4 h-4 mr-2" />
-                        {isFlipped ? "Download Artwork" : "Download Mockup"}
+                        Download
                       </Button>
 
                       <Button variant="outline" size="sm" onClick={() => setShowLargeModal(true)}>
