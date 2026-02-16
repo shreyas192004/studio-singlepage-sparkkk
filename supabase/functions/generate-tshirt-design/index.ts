@@ -193,8 +193,19 @@ One single isolated artwork image on white background, ready for fabric printing
       mockupData?.choices?.[0]?.message?.image_url;
 
     if (!imageUrl) {
+      const finishReason = mockupData?.choices?.[0]?.native_finish_reason ||
+        mockupData?.choices?.[0]?.finish_reason || "";
       console.error("No mockup image URL in response", mockupData);
-      throw new Error("Failed to generate mockup image");
+
+      if (finishReason === "IMAGE_PROHIBITED_CONTENT" ||
+          mockupData?.choices?.[0]?.native_finish_reason === "IMAGE_PROHIBITED_CONTENT") {
+        return new Response(
+          JSON.stringify({ error: "Your prompt contains content the AI cannot generate (e.g. real people, copyrighted characters). Please rephrase your design idea." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      throw new Error("Failed to generate mockup image. Try a different prompt.");
     }
 
     // Handle artwork response (non-critical - don't fail if this errors)

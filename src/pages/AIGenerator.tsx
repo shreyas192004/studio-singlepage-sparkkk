@@ -507,7 +507,13 @@ export default function AIGenerator() {
         }
       );
 
-      if (error) throw error;
+      if (error) {
+        // Try to extract the error message from the edge function response
+        const errBody = (error as any)?.context?.body ? await (error as any).context.json?.() : null;
+        const msg = errBody?.error || data?.error || error?.message || "Generation failed";
+        throw new Error(msg);
+      }
+      if (data?.error) throw new Error(data.error);
       if (!data?.imageUrl) throw new Error("No image returned from AI");
 
       setGeneratedImage(data.imageUrl);
