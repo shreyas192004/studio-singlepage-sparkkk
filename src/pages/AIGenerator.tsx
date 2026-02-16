@@ -1352,23 +1352,12 @@ export default function AIGenerator() {
                       className="relative w-full max-w-[420px] aspect-[3/4] rounded-2xl overflow-hidden shadow-xl bg-muted/20 cursor-pointer group"
                       onClick={() => setShowLargeModal(true)}
                     >
-                      {/* BASE APPAREL IMAGE */}
-                      <img
-                        src={baseImageSrc}
-                        alt="Apparel Mockup"
-                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                      />
-                      {/* GENERATED DESIGN OVERLAY */}
+                      {/* AI-GENERATED FULL MOCKUP */}
                       <img
                         src={generatedImage}
-                        alt="Design Overlay"
-                        className="absolute object-contain mix-blend-multiply opacity-90 transition-transform duration-200"
-                        style={{
-                          width: `${overlayPreset.widthPct}%`,
-                          left: `${overlayPreset.leftPct}%`,
-                          top: `${overlayPreset.topPct}%`,
-                          transform: overlayPreset.rotate ? `rotate(${overlayPreset.rotate}deg)` : undefined,
-                        }}
+                        alt="AI Generated Mockup"
+                        className="absolute inset-0 w-full h-full object-contain transition-transform duration-700 group-hover:scale-105"
+                        crossOrigin="anonymous"
                       />
 
                       {/* HOVER OVERLAY */}
