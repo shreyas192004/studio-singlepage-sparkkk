@@ -72,7 +72,8 @@ const AdminAnalytics = () => {
 
   const fetchAnalytics = async () => {
     try {
-      const { data: generations } = await (supabase as any)
+      // Try the view first
+      const { data: generations, error } = await (supabase as any)
         .from("ai_generations_with_email")
         .select(
           "id, prompt, style, color_scheme, image_url, session_id, created_at, email"
@@ -80,12 +81,26 @@ const AdminAnalytics = () => {
         .order("created_at", { ascending: false })
         .limit(50);
 
-      setStats({
-        aiGenerations: generations || [],
-      });
+      if (error) {
+        // Fallback: query ai_generations directly if view fails
+        console.warn("View query failed, falling back to direct table query:", error.message);
+        const { data: fallbackData } = await supabase
+          .from("ai_generations")
+          .select("id, prompt, style, color_scheme, image_url, session_id, created_at, user_id")
+          .order("created_at", { ascending: false })
+          .limit(50);
+
+        setStats({
+          aiGenerations: (fallbackData || []).map((g: any) => ({ ...g, email: null })),
+        });
+      } else {
+        setStats({
+          aiGenerations: generations || [],
+        });
+      }
     } catch (e) {
       console.error(e);
-      toast.error("Failed to load analytics");
+      toast.error("Failed to load analytics. Please check your connection and try again.");
     } finally {
       setIsLoading(false);
     }
@@ -128,6 +143,10 @@ const AdminAnalytics = () => {
         Loading...
       </div>
     );
+  }
+
+  if (!isLoading && stats.aiGenerations.length === 0) {
+    // Show empty state with retry
   }
 
   /* -------------------- UI -------------------- */
@@ -177,10 +196,15 @@ const AdminAnalytics = () => {
         <Card>
           <CardHeader className="flex flex-row justify-between items-center">
             <CardTitle>AI Design Generations</CardTitle>
-            <Button size="sm" variant="outline" onClick={exportAIGenerationsCSV}>
-              <Download className="w-4 h-4 mr-2" />
-              Export CSV
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => { setIsLoading(true); fetchAnalytics(); }}>
+                Retry
+              </Button>
+              <Button size="sm" variant="outline" onClick={exportAIGenerationsCSV}>
+                <Download className="w-4 h-4 mr-2" />
+                Export CSV
+              </Button>
+            </div>
           </CardHeader>
 
           <CardContent>
