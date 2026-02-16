@@ -509,12 +509,20 @@ export default function AIGenerator() {
 
       if (error) {
         // Try to extract the error message from the edge function response
-        const errBody = (error as any)?.context?.body ? await (error as any).context.json?.() : null;
-        const msg = errBody?.error || data?.error || error?.message || "Generation failed";
+        let msg = "Generation failed. Please try again.";
+        try {
+          const errBody = (error as any)?.context ? await (error as any).context.json?.() : null;
+          if (errBody?.error) msg = errBody.error;
+        } catch { /* ignore parse errors */ }
+        if (data?.error) msg = data.error;
         throw new Error(msg);
       }
-      if (data?.error) throw new Error(data.error);
-      if (!data?.imageUrl) throw new Error("No image returned from AI");
+      // Edge function returned 200 but with an error message (soft fail for content issues)
+      if (data?.error) {
+        toast.info(data.error);
+        return;
+      }
+      if (!data?.imageUrl) throw new Error("No image returned — please try a different prompt");
 
       setGeneratedImage(data.imageUrl);
       if (data.artworkUrl) setArtworkImage(data.artworkUrl);

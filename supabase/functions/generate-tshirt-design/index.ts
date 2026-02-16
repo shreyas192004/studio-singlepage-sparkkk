@@ -140,88 +140,117 @@ One single isolated artwork image on white background, ready for fabric printing
 
     console.log("Generating Mockup + Artwork in parallel...", { prompt, style, garmentType, fabricColor, placement });
 
-    const headers = {
+    const aiHeaders = {
       Authorization: `Bearer ${API_KEY}`,
       "Content-Type": "application/json",
     };
 
-    // Generate both in parallel
-    const [mockupRes, artworkRes] = await Promise.all([
-      fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash-image",
-          messages: [{ role: "user", content: mockupPrompt }],
-          modalities: ["image"],
-        }),
-      }),
-      fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash-image",
-          messages: [{ role: "user", content: artworkPrompt }],
-          modalities: ["image"],
-        }),
-      }),
-    ]);
+    // Helper: call AI and extract image URL, with auto-retry on content block
+    async function generateImage(imagePrompt: string, retryPrompt?: string): Promise<string | null> {
+      const makeCall = async (p: string) => {
+        const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: aiHeaders,
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash-image",
+            messages: [{ role: "user", content: p }],
+            modalities: ["image"],
+          }),
+        });
 
-    // Handle mockup response
-    if (!mockupRes.ok) {
-      const errorText = await mockupRes.text();
-      console.error("Mockup Generation Error:", mockupRes.status, errorText);
-      if (mockupRes.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        if (!res.ok) {
+          const errText = await res.text();
+          return { ok: false as const, status: res.status, errText };
+        }
+
+        const data = await res.json();
+        const url =
+          data?.choices?.[0]?.message?.images?.[0]?.url ||
+          data?.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
+          data?.choices?.[0]?.message?.image_url;
+
+        const nativeReason = data?.choices?.[0]?.native_finish_reason || "";
+        return { ok: true as const, url, nativeReason, data };
+      };
+
+      // First attempt
+      const result = await makeCall(imagePrompt);
+
+      if (!result.ok) {
+        if (result.status === 429) throw { httpStatus: 429, msg: "Too many requests right now. Please wait a moment and try again 🙏" };
+        if (result.status === 402) throw { httpStatus: 402, msg: "AI credits have been used up. Please contact support to continue generating designs." };
+        throw { httpStatus: 500, msg: "Something went wrong while generating. Please try again." };
       }
-      if (mockupRes.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add funds to continue generating." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+
+      if (result.url) return result.url;
+
+      // Content was blocked — auto-retry with rephrased prompt
+      if (result.nativeReason === "IMAGE_PROHIBITED_CONTENT" && retryPrompt) {
+        console.warn("Content blocked, retrying with rephrased prompt...");
+        const retry = await makeCall(retryPrompt);
+        if (retry.ok && retry.url) return retry.url;
+        // Still blocked after retry
+        console.warn("Retry also blocked");
       }
-      throw new Error(`Mockup Generation Failed: ${errorText}`);
+
+      return null;
     }
 
-    const mockupData = await mockupRes.json();
-    const imageUrl =
-      mockupData?.choices?.[0]?.message?.images?.[0]?.url ||
-      mockupData?.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
-      mockupData?.choices?.[0]?.message?.image_url;
+    // Build a "safe" rephrased version of the prompt for auto-retry
+    const safePromptNote = `
+IMPORTANT: Create an ORIGINAL artistic interpretation inspired by the following concept. 
+Do NOT depict any real person, celebrity, or trademarked character. 
+Instead, create a stylized, original character or scene that captures the spirit and energy of the idea.
+
+Original concept for inspiration: "${prompt}"
+Reinterpret this as an original artistic design.`;
+
+    const retryMockupPrompt = mockupPrompt.replace(`"${prompt}"`, safePromptNote);
+    const retryArtworkPrompt = artworkPrompt.replace(`"${prompt}"`, safePromptNote);
+
+    // Generate both in parallel
+    let imageUrl: string | null = null;
+    let artworkUrl: string | null = null;
+    let wasRephrased = false;
+
+    try {
+      const [mockupResult, artworkResult] = await Promise.allSettled([
+        generateImage(mockupPrompt, retryMockupPrompt),
+        generateImage(artworkPrompt, retryArtworkPrompt),
+      ]);
+
+      if (mockupResult.status === "fulfilled") {
+        imageUrl = mockupResult.value;
+      } else {
+        const err = mockupResult.reason;
+        if (err?.httpStatus) {
+          return new Response(
+            JSON.stringify({ error: err.msg }),
+            { status: err.httpStatus, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      if (artworkResult.status === "fulfilled") {
+        artworkUrl = artworkResult.value;
+      }
+    } catch (outerErr: any) {
+      if (outerErr?.httpStatus) {
+        return new Response(
+          JSON.stringify({ error: outerErr.msg }),
+          { status: outerErr.httpStatus, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      throw outerErr;
+    }
 
     if (!imageUrl) {
-      const finishReason = mockupData?.choices?.[0]?.native_finish_reason ||
-        mockupData?.choices?.[0]?.finish_reason || "";
-      console.error("No mockup image URL in response", mockupData);
-
-      if (finishReason === "IMAGE_PROHIBITED_CONTENT" ||
-          mockupData?.choices?.[0]?.native_finish_reason === "IMAGE_PROHIBITED_CONTENT") {
-        return new Response(
-          JSON.stringify({ error: "Your prompt contains content the AI cannot generate (e.g. real people, copyrighted characters). Please rephrase your design idea." }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      throw new Error("Failed to generate mockup image. Try a different prompt.");
-    }
-
-    // Handle artwork response (non-critical - don't fail if this errors)
-    let artworkUrl: string | null = null;
-    try {
-      if (artworkRes.ok) {
-        const artworkData = await artworkRes.json();
-        artworkUrl =
-          artworkData?.choices?.[0]?.message?.images?.[0]?.url ||
-          artworkData?.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
-          artworkData?.choices?.[0]?.message?.image_url || null;
-      } else {
-        console.warn("Artwork generation failed, continuing with mockup only");
-      }
-    } catch (artErr) {
-      console.warn("Artwork extraction error:", artErr);
+      return new Response(
+        JSON.stringify({
+          error: "The AI couldn't create this exact design. Try describing your idea differently — for example, instead of naming specific people or characters, describe their look or action. Your creativity has no limits! 🎨"
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     console.log("Generation Complete", { hasMockup: !!imageUrl, hasArtwork: !!artworkUrl });
