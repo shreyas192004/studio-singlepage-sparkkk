@@ -519,6 +519,10 @@ export default function AIGenerator() {
       }
       // Edge function returned 200 but with an error message (soft fail for content issues)
       if (data?.error) {
+        // Clear previous state — keep card on mockup side
+        setGeneratedImage(null);
+        setArtworkImage(null);
+        setIsFlipped(false);
         toast.info(data.error);
         return;
       }
@@ -1465,33 +1469,35 @@ export default function AIGenerator() {
                         variant="outline"
                         size="sm"
                         className="shadow-sm border"
+                        disabled={!artworkImage}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setIsFlipped(!isFlipped);
+                          if (artworkImage) setIsFlipped(!isFlipped);
                         }}
                       >
                         <RotateCcw className="w-4 h-4 mr-2" />
                         {isFlipped ? "View Mockup" : "View Artwork"}
                       </Button>
 
-                      {/* Download */}
+                      {/* Download — always downloads artwork only */}
                       <Button
                         variant="secondary"
                         size="sm"
                         className="shadow-sm border"
+                        disabled={!artworkImage}
                         onClick={(e) => {
                           e.stopPropagation();
-                          const url = isFlipped && artworkImage ? artworkImage : generatedImage;
+                          if (!artworkImage) return;
                           const link = document.createElement("a");
-                          link.href = url;
-                          link.download = `ai-${isFlipped ? "artwork" : "mockup"}-${Date.now()}.png`;
+                          link.href = artworkImage;
+                          link.download = `ai-artwork-${Date.now()}.png`;
                           document.body.appendChild(link);
                           link.click();
                           document.body.removeChild(link);
                         }}
                       >
                         <Download className="w-4 h-4 mr-2" />
-                        {isFlipped ? "Download Artwork" : "Download Mockup"}
+                        Download Artwork
                       </Button>
 
                       <Button variant="outline" size="sm" onClick={() => setShowLargeModal(true)}>
