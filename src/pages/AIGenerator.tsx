@@ -525,7 +525,8 @@ export default function AIGenerator() {
       if (!data?.imageUrl) throw new Error("No image returned — please try a different prompt");
 
       setGeneratedImage(data.imageUrl);
-      if (data.artworkUrl) setArtworkImage(data.artworkUrl);
+      setArtworkImage(data.artworkUrl || null);
+      setIsFlipped(false); // Always show mockup first after new generation
 
       // ---------------------------------------------------------
       // 💾 CLIENT-SIDE PERSISTENCE (Bypass Edge Function DB insert)
