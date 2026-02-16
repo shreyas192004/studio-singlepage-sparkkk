@@ -88,7 +88,7 @@ export default function AIClothConverter() {
     const path = fileName;
 
     const { error } = await supabase.storage
-      .from("ai-inputs")
+      .from("ai-designs")
       .upload(path, file, {
         upsert: true,
         contentType: file.type
@@ -96,7 +96,7 @@ export default function AIClothConverter() {
 
     if (error) throw error;
 
-    const { data } = supabase.storage.from("ai-inputs").getPublicUrl(path);
+    const { data } = supabase.storage.from("ai-designs").getPublicUrl(path);
     return data.publicUrl;
   };
 
