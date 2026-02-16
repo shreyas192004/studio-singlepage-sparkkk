@@ -101,7 +101,7 @@ export default function AIPatternToDesign() {
     const path = `pattern_${Date.now()}.${ext}`;
 
     const { error } = await supabase.storage
-      .from("ai-designs")
+      .from("ai-inputs")
       .upload(path, file, {
         upsert: true,
         contentType: file.type,
@@ -110,7 +110,7 @@ export default function AIPatternToDesign() {
     if (error) throw error;
 
     const { data } = supabase.storage
-      .from("ai-designs")
+      .from("ai-inputs")
       .getPublicUrl(path);
 
     return data.publicUrl;
