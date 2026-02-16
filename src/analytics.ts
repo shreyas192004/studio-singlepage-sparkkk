@@ -23,7 +23,7 @@ const GA_MEASUREMENT_ID: string = 'G-G********';
  * @param params Optional parameters object
  */
 const safeGtagCall = (
-  command: string,
+  command: any,
   target: string,
   params?: Gtag.CustomParams
 ): void => {

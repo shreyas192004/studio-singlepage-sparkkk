@@ -254,9 +254,9 @@ export default function AdminDesignerPayments() {
           transaction_id: txn,
           notes: notes || null,
           payment_date: new Date().toISOString(),
-          payout_week_start: week.start,
-          payout_week_end: week.end,
-        })
+          payout_week_start: week.start.toISOString(),
+          payout_week_end: week.end.toISOString(),
+        } as any)
         .select("id")
         .single();
 
