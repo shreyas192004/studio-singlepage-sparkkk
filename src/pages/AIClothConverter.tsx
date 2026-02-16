@@ -88,7 +88,7 @@ export default function AIClothConverter() {
     const path = fileName;
 
     const { error } = await supabase.storage
-      .from("ai-designs")
+      .from("ai-inputs")
       .upload(path, file, {
         upsert: true,
         contentType: file.type
@@ -96,7 +96,7 @@ export default function AIClothConverter() {
 
     if (error) throw error;
 
-    const { data } = supabase.storage.from("ai-designs").getPublicUrl(path);
+    const { data } = supabase.storage.from("ai-inputs").getPublicUrl(path);
     return data.publicUrl;
   };
 
@@ -140,37 +140,6 @@ export default function AIClothConverter() {
         });
       }
 
-      // Upload generated images to storage and save to ai_generations for analytics
-      const { data: { user } } = await supabase.auth.getUser();
-      for (const item of results) {
-        if (item.front && user) {
-          try {
-            let storedUrl = item.front;
-            if (item.front.startsWith("data:")) {
-              const imgRes = await fetch(item.front);
-              const blob = await imgRes.blob();
-              const fileName = `convert_${Date.now()}_${crypto.randomUUID().slice(0, 8)}.png`;
-              const { data: upData, error: upErr } = await supabase.storage
-                .from("ai-designs").upload(fileName, blob, { contentType: "image/png", cacheControl: "3600" });
-              if (!upErr && upData) {
-                const { data: pubUrl } = supabase.storage.from("ai-designs").getPublicUrl(fileName);
-                storedUrl = pubUrl.publicUrl;
-              }
-            }
-            await supabase.from("ai_generations").insert({
-              user_id: user.id,
-              session_id: crypto.randomUUID(),
-              image_url: storedUrl,
-              prompt: instruction,
-              style: "cloth-converter",
-              color_scheme: "reference",
-              clothing_type: item.clothingType,
-              image_position: "front",
-            });
-          } catch (e) { console.warn("Failed to save generation:", e); }
-        }
-      }
-
       setGeneratedResults(results);
       toast.success("All designs generated successfully!");
     } catch (err: any) {
@@ -188,12 +157,48 @@ export default function AIClothConverter() {
     setVariantModalOpen(true);
   };
 
-  const confirmAddToCart = () => {
+  /* Helper: upload generated image & save to analytics */
+  const saveGeneratedDesign = async (item: GeneratedResult) => {
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser || !item.front) return;
+
+      let storedUrl = item.front;
+      if (item.front.startsWith("data:")) {
+        const imgRes = await fetch(item.front);
+        const blob = await imgRes.blob();
+        const fileName = `convert_${Date.now()}_${crypto.randomUUID().slice(0, 8)}.png`;
+        const { data: upData, error: upErr } = await supabase.storage
+          .from("ai-designs").upload(fileName, blob, { contentType: "image/png", cacheControl: "3600" });
+        if (!upErr && upData) {
+          const { data: pubUrl } = supabase.storage.from("ai-designs").getPublicUrl(fileName);
+          storedUrl = pubUrl.publicUrl;
+        }
+      }
+      await supabase.from("ai_generations").insert({
+        user_id: currentUser.id,
+        session_id: crypto.randomUUID(),
+        image_url: storedUrl,
+        prompt: instruction,
+        style: "cloth-converter",
+        color_scheme: "reference",
+        clothing_type: item.clothingType,
+        image_position: "front",
+      });
+    } catch (e) { console.warn("Failed to save generation:", e); }
+  };
+
+  const confirmAddToCart = async () => {
     if (generatedResults.length === 0) return;
+
+    // Save all designs to storage & analytics
+    for (const item of generatedResults) {
+      await saveGeneratedDesign(item);
+    }
 
     generatedResults.forEach((item) => {
       addToCart({
-        id: crypto.randomUUID(), // Generate proper UUID format
+        id: crypto.randomUUID(),
         name: `AI Custom ${item.clothingType.toUpperCase()}`,
         price: CLOTHING_PRICES[item.clothingType],
         image: item.front,
@@ -209,23 +214,21 @@ export default function AIClothConverter() {
   };
 
   /* ---------------- Buy Now Logic ---------------- */
-  const handleBuyNow = () => {
-    // Check if user is logged in
+  const handleBuyNow = async () => {
     if (!user) {
       toast.error("Please login to proceed to checkout");
       return;
     }
-
-    // Ensure at least one design is generated
     if (generatedResults.length === 0) {
       toast.error("Please generate a design first");
       return;
     }
 
-    // Get the active result
     const activeResult = generatedResults[activeResultIndex];
 
-    // Navigate to checkout with complete state
+    // Save design to storage & analytics on buy
+    await saveGeneratedDesign(activeResult);
+
     navigate("/checkout-ai", {
       state: {
         clothingType: activeResult.clothingType,
