@@ -140,6 +140,37 @@ export default function AIClothConverter() {
         });
       }
 
+      // Upload generated images to storage and save to ai_generations for analytics
+      const { data: { user } } = await supabase.auth.getUser();
+      for (const item of results) {
+        if (item.front && user) {
+          try {
+            let storedUrl = item.front;
+            if (item.front.startsWith("data:")) {
+              const imgRes = await fetch(item.front);
+              const blob = await imgRes.blob();
+              const fileName = `convert_${Date.now()}_${crypto.randomUUID().slice(0, 8)}.png`;
+              const { data: upData, error: upErr } = await supabase.storage
+                .from("ai-designs").upload(fileName, blob, { contentType: "image/png", cacheControl: "3600" });
+              if (!upErr && upData) {
+                const { data: pubUrl } = supabase.storage.from("ai-designs").getPublicUrl(fileName);
+                storedUrl = pubUrl.publicUrl;
+              }
+            }
+            await supabase.from("ai_generations").insert({
+              user_id: user.id,
+              session_id: crypto.randomUUID(),
+              image_url: storedUrl,
+              prompt: instruction,
+              style: "cloth-converter",
+              color_scheme: "reference",
+              clothing_type: item.clothingType,
+              image_position: "front",
+            });
+          } catch (e) { console.warn("Failed to save generation:", e); }
+        }
+      }
+
       setGeneratedResults(results);
       toast.success("All designs generated successfully!");
     } catch (err: any) {

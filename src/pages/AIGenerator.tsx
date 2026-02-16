@@ -529,14 +529,35 @@ export default function AIGenerator() {
       setIsFlipped(false); // Always show mockup first after new generation
 
       // ---------------------------------------------------------
-      // 💾 CLIENT-SIDE PERSISTENCE (Bypass Edge Function DB insert)
+      // 💾 Upload image to storage then save URL to DB
       // ---------------------------------------------------------
+      let storedImageUrl = data.imageUrl;
+      try {
+        // Convert base64 data URI to blob for storage upload
+        if (data.imageUrl?.startsWith("data:")) {
+          const res = await fetch(data.imageUrl);
+          const blob = await res.blob();
+          const fileName = `mockup_${Date.now()}_${crypto.randomUUID().slice(0, 8)}.png`;
+          const { data: uploadData, error: uploadErr } = await supabase.storage
+            .from("ai-designs")
+            .upload(fileName, blob, { contentType: "image/png", cacheControl: "3600" });
+          if (!uploadErr && uploadData) {
+            const { data: pubUrl } = supabase.storage.from("ai-designs").getPublicUrl(fileName);
+            storedImageUrl = pubUrl.publicUrl;
+          } else {
+            console.warn("Storage upload failed, saving base64 URL:", uploadErr);
+          }
+        }
+      } catch (storageErr) {
+        console.warn("Storage upload error:", storageErr);
+      }
+
       const { data: insertedRecord, error: insertError } = await supabase
         .from("ai_generations")
         .insert({
           user_id: user.id,
-          session_id: crypto.randomUUID(), // tracking session
-          image_url: data.imageUrl,
+          session_id: crypto.randomUUID(),
+          image_url: storedImageUrl,
           prompt: trimmedPrompt,
           style: safeStyle,
           color_scheme: safeColorScheme,

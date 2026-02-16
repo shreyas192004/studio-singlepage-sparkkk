@@ -781,7 +781,31 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      ai_generations_with_email: {
+        Row: {
+          clothing_type: string | null
+          color_scheme: string | null
+          created_at: string | null
+          email: string | null
+          id: string | null
+          image_position: string | null
+          image_url: string | null
+          included_text: string | null
+          prompt: string | null
+          session_id: string | null
+          style: string | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_generations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
     }
     Functions: {
       generate_order_number: { Args: never; Returns: string }
