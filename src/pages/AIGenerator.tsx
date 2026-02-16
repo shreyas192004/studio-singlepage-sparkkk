@@ -16,6 +16,7 @@ import {
   Code2,
   CloudLightning,
   Download,
+  RotateCcw,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -297,6 +298,8 @@ export default function AIGenerator() {
   const [quality, setQuality] = useState<"standard" | "high" | "ultra">("high");
   const [creativity, setCreativity] = useState(70);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [artworkImage, setArtworkImage] = useState<string | null>(null);
+  const [isFlipped, setIsFlipped] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationCount, setGenerationCount] = useState(0);
   const [designText, setDesignText] = useState("");
@@ -436,6 +439,8 @@ export default function AIGenerator() {
 
     setIsGenerating(true);
     setGeneratedImage(null);
+    setArtworkImage(null);
+    setIsFlipped(false);
     setDesignRecord(null);
 
     try {
@@ -506,6 +511,7 @@ export default function AIGenerator() {
       if (!data?.imageUrl) throw new Error("No image returned from AI");
 
       setGeneratedImage(data.imageUrl);
+      if (data.artworkUrl) setArtworkImage(data.artworkUrl);
 
       // ---------------------------------------------------------
       // 💾 CLIENT-SIDE PERSISTENCE (Bypass Edge Function DB insert)
@@ -1335,9 +1341,40 @@ export default function AIGenerator() {
             </aside> */}
 
             <aside className="order-1 lg:order-2">
-              <div className="min-h-[600px] h-full rounded-[2.5rem] border border-muted-foreground/10 flex flex-col items-center justify-center p-8 bg-white dark:bg-muted/5 shadow-2xl shadow-black/[0.02]">
+              <div className="min-h-[650px] h-full rounded-[2.5rem] border border-muted-foreground/10 flex flex-col items-center justify-center p-8 bg-white dark:bg-muted/5 shadow-2xl shadow-black/[0.02]">
 
-                {!generatedImage && (
+                {/* LOADING ANIMATION */}
+                {isGenerating && (
+                  <div className="flex flex-col items-center justify-center gap-6 animate-in fade-in duration-500">
+                    <div className="relative w-24 h-24">
+                      {/* Outer spinning ring */}
+                      <div className="absolute inset-0 rounded-full border-4 border-muted animate-spin" style={{ borderTopColor: 'hsl(var(--sale-blue))', animationDuration: '1.5s' }} />
+                      {/* Inner pulsing circle */}
+                      <div className="absolute inset-3 rounded-full bg-sale-blue/10 animate-pulse flex items-center justify-center">
+                        <Sparkles className="w-8 h-8 text-sale-blue animate-bounce" style={{ animationDuration: '1.8s' }} />
+                      </div>
+                    </div>
+                    <div className="text-center space-y-2">
+                      <p className="text-sm font-semibold text-foreground">Creating your design...</p>
+                      <p className="text-xs text-muted-foreground max-w-[250px]">
+                        Our AI is crafting a unique mockup just for you. This usually takes 15–30 seconds ✨
+                      </p>
+                    </div>
+                    {/* Animated progress dots */}
+                    <div className="flex gap-1.5">
+                      {[0, 1, 2, 3, 4].map((i) => (
+                        <div
+                          key={i}
+                          className="w-2 h-2 rounded-full bg-sale-blue/60 animate-pulse"
+                          style={{ animationDelay: `${i * 0.2}s` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* EMPTY STATE */}
+                {!generatedImage && !isGenerating && (
                   <div className="text-center space-y-4">
                     <Sparkles className="w-12 h-12 mx-auto text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">
@@ -1346,42 +1383,102 @@ export default function AIGenerator() {
                   </div>
                 )}
 
-                {generatedImage && (
+                {/* FLIP CARD PREVIEW */}
+                {generatedImage && !isGenerating && (
                   <div className="relative w-full h-full flex flex-col items-center justify-center animate-in fade-in zoom-in duration-500">
+                    
+                    {/* Flip card container */}
                     <div
-                      className="relative w-full max-w-[420px] aspect-[3/4] rounded-2xl overflow-hidden shadow-xl bg-muted/20 cursor-pointer group"
-                      onClick={() => setShowLargeModal(true)}
+                      className="relative w-full max-w-[520px] aspect-[3/4] cursor-pointer"
+                      style={{ perspective: "1200px" }}
                     >
-                      {/* AI-GENERATED FULL MOCKUP */}
-                      <img
-                        src={generatedImage}
-                        alt="AI Generated Mockup"
-                        className="absolute inset-0 w-full h-full object-contain transition-transform duration-700 group-hover:scale-105"
-                        crossOrigin="anonymous"
-                      />
+                      <div
+                        className="relative w-full h-full transition-transform duration-700"
+                        style={{
+                          transformStyle: "preserve-3d",
+                          transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
+                        }}
+                      >
+                        {/* FRONT - Full Mockup */}
+                        <div
+                          className="absolute inset-0 rounded-2xl overflow-hidden shadow-xl bg-muted/20 group"
+                          style={{ backfaceVisibility: "hidden" }}
+                          onClick={() => setShowLargeModal(true)}
+                        >
+                          <img
+                            src={generatedImage}
+                            alt="AI Generated Mockup"
+                            className="absolute inset-0 w-full h-full object-contain transition-transform duration-700 group-hover:scale-105"
+                            crossOrigin="anonymous"
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
+                          <div className="absolute top-3 left-3 bg-card/80 backdrop-blur-sm text-xs font-medium px-2.5 py-1 rounded-full border border-border">
+                            👕 Mockup Preview
+                          </div>
+                        </div>
 
-                      {/* HOVER OVERLAY */}
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
+                        {/* BACK - Isolated Artwork */}
+                        <div
+                          className="absolute inset-0 rounded-2xl overflow-hidden shadow-xl bg-white group"
+                          style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+                          onClick={() => setShowLargeModal(true)}
+                        >
+                          {artworkImage ? (
+                            <img
+                              src={artworkImage}
+                              alt="Isolated Artwork"
+                              className="absolute inset-0 w-full h-full object-contain p-6 transition-transform duration-700 group-hover:scale-105"
+                              crossOrigin="anonymous"
+                            />
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+                              <p className="text-sm">Artwork not available</p>
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
+                          <div className="absolute top-3 left-3 bg-card/80 backdrop-blur-sm text-xs font-medium px-2.5 py-1 rounded-full border border-border">
+                            🎨 Print-Ready Artwork
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="mt-6 flex items-center gap-3 animate-in slide-in-from-bottom-2 fade-in duration-700 delay-300">
+                    {/* CONTROLS */}
+                    <div className="mt-6 flex flex-wrap items-center justify-center gap-3 animate-in slide-in-from-bottom-2 fade-in duration-700 delay-300">
+                      {/* Flip button */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="shadow-sm border"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsFlipped(!isFlipped);
+                        }}
+                      >
+                        <RotateCcw className="w-4 h-4 mr-2" />
+                        {isFlipped ? "View Mockup" : "View Artwork"}
+                      </Button>
+
+                      {/* Download */}
                       <Button
                         variant="secondary"
                         size="sm"
                         className="shadow-sm border"
                         onClick={(e) => {
                           e.stopPropagation();
+                          const url = isFlipped && artworkImage ? artworkImage : generatedImage;
                           const link = document.createElement("a");
-                          link.href = generatedImage;
-                          link.download = `ai-design-${Date.now()}.png`;
+                          link.href = url;
+                          link.download = `ai-${isFlipped ? "artwork" : "mockup"}-${Date.now()}.png`;
                           document.body.appendChild(link);
                           link.click();
                           document.body.removeChild(link);
                         }}
                       >
                         <Download className="w-4 h-4 mr-2" />
-                        Download Artwork
+                        {isFlipped ? "Download Artwork" : "Download Mockup"}
                       </Button>
+
                       <Button variant="outline" size="sm" onClick={() => setShowLargeModal(true)}>
                         <Eye className="w-4 h-4 mr-2" />
                         Preview
@@ -1391,7 +1488,7 @@ export default function AIGenerator() {
                 )}
 
 
-                {generatedImage && (
+                {generatedImage && !isGenerating && (
                   <div className="flex gap-4 pt-6">
                     <Button variant="outline" onClick={handleAddToCart}>
                       <ShoppingCart className="w-4 h-4 mr-2" />
