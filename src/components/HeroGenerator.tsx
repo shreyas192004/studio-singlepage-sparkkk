@@ -1,10 +1,10 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sparkles } from "lucide-react";
 
-const HeroGenerator = () => {
+const HeroGenerator = (): React.ReactElement | null => {
   const [prompt, setPrompt] = useState("");
   const navigate = useNavigate();
 
