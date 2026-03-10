@@ -634,10 +634,18 @@ export default function AIGenerator() {
         toast.success("Design generated and saved!");
       }
 
-      const newCount = generationCount + 1;
-      setGenerationCount(newCount);
-
+      // Re-fetch the actual count from DB to stay in sync
       if (user) {
+        const { data: statsData } = await supabase
+          .from("user_generation_stats")
+          .select("generation_count")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        const currentDbCount = statsData?.generation_count ?? generationCount;
+        const newCount = currentDbCount + 1;
+        setGenerationCount(newCount);
+
         await supabase
           .from("user_generation_stats")
           .upsert(
@@ -645,6 +653,8 @@ export default function AIGenerator() {
             { onConflict: "user_id" }
           );
       } else {
+        const newCount = generationCount + 1;
+        setGenerationCount(newCount);
         localStorage.setItem("generation_count", newCount.toString());
       }
 
@@ -1027,6 +1037,15 @@ export default function AIGenerator() {
   //       )}
   //     </div>
   //   );
+
+  // Don't render the page while auth is still loading — prevents login modal flash
+  if (authLoading) {
+    return (
+      <div className="min-h-screen w-full bg-white flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen w-full bg-white font-sans text-black selection:bg-accent-neon-lime selection:text-black relative overflow-x-hidden">

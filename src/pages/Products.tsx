@@ -6,12 +6,11 @@ import { ProductFilters } from "@/components/ProductFilters";
 import { Button } from "@/components/ui/button";
 import { useWishlist } from "@/contexts/WishlistContext";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 
 const Products = () => {
   const { toggleWishlist, isInWishlist } = useWishlist();
 
-  const [allProducts, setAllProducts] = useState<any[]>([]);
-  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
 
   // Filter states
@@ -23,8 +22,10 @@ const Products = () => {
   const categories = ["Accessories", "Outerwear", "Bags"];
   const colors = ["Black", "White", "Brown", "Beige", "Green", "Orange"];
 
-  useEffect(() => {
-    const fetchProducts = async () => {
+  // Use React Query with caching for products
+  const { data: allProducts = [], isLoading: isLoadingProducts } = useQuery({
+    queryKey: ["products-public"],
+    queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
         .select(`*, designers ( id, name )`)
@@ -33,11 +34,10 @@ const Products = () => {
 
       if (error) {
         toast.error("Failed to load products");
-        setIsLoadingProducts(false);
-        return;
+        return [];
       }
 
-      const transformed =
+      return (
         data?.map((product: any) => ({
           id: product.id,
           name: product.title,
@@ -57,14 +57,12 @@ const Products = () => {
             product.designers?.name ||
             product.designer_name ||
             undefined,
-        })) || [];
-
-      setAllProducts(transformed);
-      setIsLoadingProducts(false);
-    };
-
-    fetchProducts();
-  }, []);
+        })) || []
+      );
+    },
+    staleTime: 5 * 60 * 1000,  // Cache products for 5 minutes
+    gcTime: 10 * 60 * 1000,
+  });
 
   // Apply filters
   let filteredProducts = allProducts.filter((product) => {
