@@ -139,7 +139,7 @@ export const CheckoutPage = () => {
         .select("*")
         .eq("code", couponCode.toUpperCase())
         .eq("is_active", true)
-        .single();
+        .maybeSingle();
 
       if (error || !data) {
         toast.error("Invalid coupon code");

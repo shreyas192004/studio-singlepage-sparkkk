@@ -108,7 +108,6 @@ export default function AIClothConverter() {
 
   /* ---------------- Upload helper (Uses AI Supabase) ---------------- */
   const uploadToStorage = async (file: File) => {
-    console.log("DEBUG: Starting upload to AI Supabase storage...");
     const fileExt = file.name.split('.').pop();
     const fileName = `${Math.random().toString(36).substring(7)}-${Date.now()}.${fileExt}`;
 
@@ -128,7 +127,6 @@ export default function AIClothConverter() {
     }
 
     const { data } = lovableSupabase.storage.from("ai-inputs").getPublicUrl(path);
-    console.log("DEBUG: Uploaded to AI project. Public URL:", data.publicUrl);
     return data.publicUrl;
   };
 
@@ -158,7 +156,6 @@ export default function AIClothConverter() {
 
     // BUG 3/9 FIX: Remove the blocking AI session gate – edge functions work
     // with the anon key. Only a main-project user session is required.
-    console.log("DEBUG: Proceeding with generation (AI session check removed).");
 
     setLoading(true);
     setGeneratedResults([]);
@@ -180,8 +177,6 @@ export default function AIClothConverter() {
           targetClothingType: clothingType,
           designSide,
         };
-
-        console.log("DEBUG: Invoking 'convert-cloth-design' with body:", requestBody);
 
         const response = await lovableSupabase.functions.invoke(
           "convert-cloth-design",
@@ -213,9 +208,7 @@ export default function AIClothConverter() {
           throw new Error(serverError || response.error.message);
         }
 
-        console.log("EDGE FUNCTION SUCCESS:", response.data);
         const data = response.data;
-
 
         results.push({
           clothingType,
@@ -461,9 +454,9 @@ export default function AIClothConverter() {
           </div>
 
           {/* RIGHT: Display Area */}
-          <div className="relative group sticky top-24 z-10">
+          <div className="relative group sticky top-24 z-10 flex flex-col gap-4">
             <div className={`
-  min-h-[550px] h-[250px] rounded-[3rem] border-4 border-black flex flex-col items-center justify-center p-10 transition-all duration-500
+  min-h-[520px] rounded-[3rem] border-4 border-black flex flex-col items-center justify-center p-8 transition-all duration-500
   ${loading ? 'bg-black/5' : 'bg-white shadow-[12px_12px_0px_0px_rgba(37,99,235,0.2)]'}
 `}>
               {generatedResults.length === 0 && !loading && (
@@ -489,10 +482,10 @@ export default function AIClothConverter() {
 
               {/* GENERATED IMAGES */}
               {generatedResults.length > 0 && !loading && (
-                <div className="w-full flex flex-col items-center gap-6 animate-in fade-in zoom-in duration-700">
+                <div className="w-full flex flex-col items-center gap-5 animate-in fade-in zoom-in duration-700">
 
                   {/* ACTIVE IMAGE */}
-                  <div className="w-full max-w-md">
+                  <div className="w-full">
                     <ResultView
                       label={`${generatedResults[activeResultIndex].clothingType} Design`}
                       url={
@@ -505,68 +498,63 @@ export default function AIClothConverter() {
                   </div>
 
                   {/* SLIDER CONTROLS */}
-                  <div className="flex items-center gap-3">
-                    <Button
-                      variant="outline"
-                      disabled={activeResultIndex === 0}
-                      onClick={() =>
-                        setActiveResultIndex((i) => Math.max(i - 1, 0))
-                      }
-                    >
-                      ←
-                    </Button>
-
-                    {generatedResults.map((result, index) => (
-                      <button
-                        key={result.clothingType}
-                        onClick={() => setActiveResultIndex(index)}
-                        className={`px-4 py-2 rounded-full text-sm font-semibold border transition
-            ${index === activeResultIndex
-                            ? "bg-blue-600 text-white border-blue-600"
-                            : "border-muted hover:border-blue-300"
-                          }`}
+                  {generatedResults.length > 1 && (
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={activeResultIndex === 0}
+                        onClick={() => setActiveResultIndex((i) => Math.max(i - 1, 0))}
                       >
-                        {result.clothingType}
-                      </button>
-                    ))}
-
-                    <Button
-                      variant="outline"
-                      disabled={activeResultIndex === generatedResults.length - 1}
-                      onClick={() =>
-                        setActiveResultIndex((i) =>
-                          Math.min(i + 1, generatedResults.length - 1)
-                        )
-                      }
-                    >
-                      →
-                    </Button>
-                  </div>
-
-                  {/* ACTION BUTTONS */}
-                  <div className="flex gap-4 pt-10 w-full border-t-2 border-black/5">
-                    <Button
-                      variant="outline"
-                      onClick={handleAddToCartClick}
-                      disabled={generatedResults.length === 0}
-                      className="flex-1 h-14 border-4 border-black rounded-full font-black uppercase tracking-tighter hover:bg-black hover:text-white transition-all shadow-lg"
-                    >
-                      <ShoppingCart className="w-4 h-4 mr-2" />
-                      Add to Cart
-                    </Button>
-
-                    <Button
-                      className="flex-1 h-14 bg-black text-white rounded-full font-black uppercase tracking-tighter hover:bg-accent-neon-lime hover:text-black transition-all shadow-lg border-4 border-black"
-                      onClick={handleBuyNow}
-                      disabled={generatedResults.length === 0}
-                    >
-                      <CreditCard className="w-4 h-4 mr-2" />
-                      Buy Now
-                    </Button>
-                  </div>
+                        ←
+                      </Button>
+                      {generatedResults.map((result, index) => (
+                        <button
+                          key={result.clothingType}
+                          onClick={() => setActiveResultIndex(index)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition
+                            ${index === activeResultIndex
+                              ? "bg-blue-600 text-white border-blue-600"
+                              : "border-muted hover:border-blue-300"
+                            }`}
+                        >
+                          {result.clothingType}
+                        </button>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={activeResultIndex === generatedResults.length - 1}
+                        onClick={() => setActiveResultIndex((i) => Math.min(i + 1, generatedResults.length - 1))}
+                      >
+                        →
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+
+            {/* ACTION BUTTONS — outside the card, always visible */}
+            {generatedResults.length > 0 && !loading && (
+              <div className="flex gap-3 w-full">
+                <Button
+                  variant="outline"
+                  onClick={handleAddToCartClick}
+                  className="flex-1 h-12 border-4 border-black rounded-full font-black uppercase tracking-tighter text-sm hover:bg-black hover:text-white transition-all shadow-lg"
+                >
+                  <ShoppingCart className="w-4 h-4 mr-2" />
+                  Add to Cart
+                </Button>
+                <Button
+                  className="flex-1 h-12 bg-black text-white rounded-full font-black uppercase tracking-tighter text-sm hover:bg-accent-neon-lime hover:text-black transition-all shadow-lg border-4 border-black"
+                  onClick={handleBuyNow}
+                >
+                  <CreditCard className="w-4 h-4 mr-2" />
+                  Buy Now
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </main>
@@ -713,7 +701,7 @@ function ResultView({ label, url, onClick, }: { label: string; url: string; onCl
         </Button>
 
       </div>
-      <div className="aspect-[4/3 ] rounded-[2rem] overflow-hidden border shadow-lg bg-muted group/img relative">
+      <div className="aspect-[4/3] rounded-[2rem] overflow-hidden border shadow-lg bg-muted group/img relative">
         <img
           src={url}
           alt={label}

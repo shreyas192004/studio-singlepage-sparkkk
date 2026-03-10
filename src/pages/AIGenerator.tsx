@@ -506,30 +506,6 @@ export default function AIGenerator() {
         ? colorScheme
         : "normal";
 
-      console.log("SAFE PAYLOAD:", {
-        prompt: trimmedPrompt,
-        style: safeStyle,
-        colorScheme: safeColorScheme,
-        quality,
-        creativity,
-        clothingType: safeClothingType,
-        imagePosition: safeImagePosition,
-        color: selectedColor,
-        text: trimmedText,
-      });
-
-      console.log("DEBUG: Invoking 'generate-tshirt-design' with body:", {
-        prompt: trimmedPrompt,
-        style: safeStyle,
-        colorScheme: safeColorScheme,
-        quality,
-        creativity,
-        clothingType: safeClothingType,
-        imagePosition: safeImagePosition,
-        color: selectedColor?.toLowerCase() || "black",
-        text: trimmedText || undefined,
-      });
-
       const response = await lovableSupabase.functions.invoke(
         "generate-tshirt-design",
         {
@@ -572,7 +548,6 @@ export default function AIGenerator() {
         throw new Error(serverError || response.error.message);
       }
 
-      console.log("EDGE FUNCTION SUCCESS:", response.data);
       const data = response.data;
       // Edge function returned 200 but with an error message (soft fail for content issues)
       if (data?.error) {
@@ -629,7 +604,6 @@ export default function AIGenerator() {
         console.error("Failed to save generation to DB:", insertError);
         toast.error("Image generated but failed to save to history.");
       } else {
-        console.log("Design saved to DB:", insertedRecord);
         setDesignRecord(insertedRecord);
         toast.success("Design generated and saved!");
       }
@@ -1403,7 +1377,7 @@ export default function AIGenerator() {
             </aside> */}
 
             <aside className="order-1 lg:order-2 lg:sticky lg:top-28 z-10 w-full lg:max-w-full min-w-0">
-              <div className="relative w-full aspect-[2/1] rounded-[2.5rem] border-4 border-black flex flex-col items-center justify-center bg-white shadow-[12px_12px_0px_0px_rgba(37,99,235,0.2)] box-border overflow-hidden">
+              <div className="relative w-full aspect-square md:aspect-[2/1] rounded-[2.5rem] border-4 border-black flex flex-col items-center justify-center bg-white shadow-[12px_12px_0px_0px_rgba(37,99,235,0.2)] box-border overflow-hidden">
 
                 {/* LOADING ANIMATION */}
                 {isGenerating && (
@@ -1465,22 +1439,22 @@ export default function AIGenerator() {
               {/* ACTION BUTTONS (Outside Aspect Ratio Box) */}
               {
                 generatedImage && !isGenerating && (
-                  <div className="mt-8 space-y-6 w-full animate-in fade-in slide-in-from-bottom-5 duration-500">
-                    <div className="flex flex-wrap items-center justify-center gap-4">
+                  <div className="mt-4 md:mt-8 space-y-3 md:space-y-6 w-full animate-in fade-in slide-in-from-bottom-5 duration-500">
+                    <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4">
                       <Button
                         variant="outline"
                         size="lg"
-                        className="flex-1 min-w-[140px] border-2 border-black font-black uppercase h-12 px-6 hover:bg-black hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-none"
+                        className="flex-1 min-w-[100px] md:min-w-[140px] border-2 border-black font-black uppercase h-9 md:h-12 px-3 md:px-6 text-xs md:text-sm hover:bg-black hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-none"
                         onClick={() => setShowLargeModal(true)}
                       >
-                        <Eye className="w-5 h-5 mr-2" />
+                        <Eye className="w-4 h-4 mr-1 md:mr-2" />
                         Full Preview
                       </Button>
 
                       <Button
                         variant="secondary"
                         size="lg"
-                        className="flex-1 min-w-[140px] border-2 border-black font-black uppercase h-12 px-6 bg-white hover:bg-accent-neon-blue hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-none"
+                        className="flex-1 min-w-[100px] md:min-w-[140px] border-2 border-black font-black uppercase h-9 md:h-12 px-3 md:px-6 text-xs md:text-sm bg-white hover:bg-accent-neon-blue hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-none"
                         onClick={(e) => {
                           e.stopPropagation();
                           const link = document.createElement("a");
@@ -1491,23 +1465,23 @@ export default function AIGenerator() {
                           document.body.removeChild(link);
                         }}
                       >
-                        <Download className="w-5 h-5 mr-2" />
+                        <Download className="w-4 h-4 mr-1 md:mr-2" />
                         SAVE
                       </Button>
                     </div>
 
-                    <div className="flex gap-4 w-full">
+                    <div className="flex gap-2 md:gap-4 w-full">
                       <Button
                         variant="outline"
                         onClick={handleAddToCart}
-                        className="flex-1 h-16 border-4 border-black rounded-full font-black uppercase tracking-tighter hover:bg-black hover:text-white transition-all shadow-xl"
+                        className="flex-1 h-11 md:h-16 border-4 border-black rounded-full font-black uppercase tracking-tighter text-xs md:text-sm hover:bg-black hover:text-white transition-all shadow-xl"
                       >
-                        <ShoppingCart className="w-5 h-5 mr-2" />
+                        <ShoppingCart className="w-4 h-4 mr-1 md:mr-2" />
                         Add to Cart
                       </Button>
 
                       <Button
-                        className="flex-1 h-16 bg-accent-neon-blue text-white rounded-full font-black uppercase tracking-tighter hover:bg-black transition-all shadow-xl ring-4 ring-white border-4 border-black"
+                        className="flex-1 h-11 md:h-16 bg-accent-neon-blue text-white rounded-full font-black uppercase tracking-tighter text-xs md:text-sm hover:bg-black transition-all shadow-xl ring-4 ring-white border-4 border-black"
                         onClick={handleBuy}
                       >
                         Buy Now
