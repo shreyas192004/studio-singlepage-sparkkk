@@ -1,11 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const mainUrl = import.meta.env.VITE_MAIN_SUPABASE_URL;
-const mainAnonKey = import.meta.env.VITE_MAIN_SUPABASE_ANON_KEY;
+// These globals are injected by vite.config.ts define block (publishable keys)
+declare const __MAIN_SUPABASE_URL__: string;
+declare const __MAIN_SUPABASE_ANON_KEY__: string;
+declare const __AI_SUPABASE_URL__: string;
+declare const __AI_SUPABASE_ANON_KEY__: string;
 
-const aiUrl = import.meta.env.VITE_AI_SUPABASE_URL;
-const aiAnonKey = import.meta.env.VITE_AI_SUPABASE_ANON_KEY;
+const mainUrl = __MAIN_SUPABASE_URL__;
+const mainAnonKey = __MAIN_SUPABASE_ANON_KEY__;
+const aiUrl = __AI_SUPABASE_URL__;
+const aiAnonKey = __AI_SUPABASE_ANON_KEY__;
 
 if (!mainUrl || !mainAnonKey) {
   throw new Error("Main Supabase env not loaded");
