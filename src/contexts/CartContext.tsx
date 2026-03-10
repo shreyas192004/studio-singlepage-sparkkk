@@ -147,8 +147,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   quantity: item.quantity,
                   selected_size: item.size || null,
                   selected_color: item.color || null,
-                  note: item.note || null,
-                });
+                } as any);
               }
               setCart(localCart);
             } catch (err) {
