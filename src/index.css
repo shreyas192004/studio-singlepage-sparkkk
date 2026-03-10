@@ -1,0 +1,234 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+
+  html,
+  body,
+  #root {
+    @apply w-full overflow-x-hidden;
+  }
+
+  :root {
+    /* DEFAULT TO DARK MODE ("Midnight Luxury") */
+    --background: 240 6% 8%;
+    /* #0a0a0a */
+    --foreground: 0 0% 100%;
+
+    --card: 240 6% 12%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 240 6% 12%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 0 0% 100%;
+    --primary-foreground: 240 6% 10%;
+
+    --secondary: 240 4% 16%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 240 4% 16%;
+    --muted-foreground: 240 5% 65%;
+
+    /* TESORA Premium Gold (Less Yellow, More Champagne/Bronze) */
+    --accent: 43 40% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --accent-gold-dark: 40 30% 30%;
+    --accent-gold-mid: 43 45% 55%;
+    --accent-gold-bright: 45 60% 75%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 43 40% 50%;
+
+    --radius: 0.5rem;
+    /* Sharper corners for luxury feel */
+
+    --sale-orange: 25 95% 53%;
+    --sale-blue: 217 91% 60%;
+    --dark-bg: 240 6% 8%;
+
+    --sidebar-background: 240 6% 10%;
+    --sidebar-foreground: 240 5% 90%;
+    --sidebar-primary: 43 40% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --background: 0 0% 100%;
+    /* Pure White */
+    --foreground: 240 10% 3.9%;
+    /* Deep Black */
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+
+    --primary: 240 5.9% 10%;
+    /* Black */
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 240 4.8% 95.9%;
+    /* Off-white gray */
+    --secondary-foreground: 240 5.9% 10%;
+
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 10% 3.9%;
+
+    --radius: 1rem;
+    /* Rounded-2xl/3xl feel */
+
+    /* Neo-Pop Custom Colors */
+    --neon-blue: 221 83% 53%;
+    /* #2563EB - Electric Blue */
+    --neon-lime: 84 100% 59%;
+    /* #CCFF00 - Acid Lime */
+    --soft-purple: 270 95% 75%;
+    /* #C084FC - Gen Z Purple */
+  }
+
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+
+    --card: 240 5% 15%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 5% 15%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 6% 10%;
+
+    --secondary: 240 5% 20%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 240 5% 20%;
+    --muted-foreground: 240 5% 65%;
+
+    /* TESORA Signature Black-Gold (Dark) */
+    --accent: 42 28% 45%;
+    --accent-foreground: 240 6% 10%;
+
+    /* TESORA Black → Gold Gradient (Dark) */
+    --accent-gold-1: 240 8% 6%;
+    --accent-gold-2: 43 38% 52%;
+    --accent-gold-3: 43 45% 30%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 5% 20%;
+    --input: 240 5% 20%;
+    --ring: 42 28% 45%;
+
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 42 28% 45%;
+  }
+}
+
+@layer utilities {
+
+  /* TESORA Metallic Foil Gradient (Dark → Bright → Dark) */
+  .bg-accent-gold {
+    background: linear-gradient(90deg,
+        hsl(var(--accent-gold-dark)) 0%,
+        hsl(var(--accent-gold-mid)) 25%,
+        hsl(var(--accent-gold-bright)) 50%,
+        hsl(var(--accent-gold-mid)) 75%,
+        hsl(var(--accent-gold-dark)) 100%);
+  }
+
+  /* TESORA Metallic Text Gradient */
+  .text-accent-gold {
+    background: linear-gradient(90deg,
+        hsl(var(--accent-gold-dark)) 0%,
+        hsl(var(--accent-gold-mid)) 25%,
+        hsl(var(--accent-gold-bright)) 50%,
+        hsl(var(--accent-gold-mid)) 75%,
+        hsl(var(--accent-gold-dark)) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .animate-infinite-scroll {
+    animation: infinite-scroll 40s linear infinite;
+  }
+
+  @keyframes infinite-scroll {
+    from {
+      transform: translateX(0);
+    }
+
+    to {
+      transform: translateX(-100%);
+    }
+  }
+
+  @keyframes floatBlob {
+    0% {
+      transform: translate(0px, 0px) scale(1);
+    }
+
+    33% {
+      transform: translate(30px, -50px) scale(1.1);
+    }
+
+    66% {
+      transform: translate(-20px, 20px) scale(0.9);
+    }
+
+    100% {
+      transform: translate(0px, 0px) scale(1);
+    }
+  }
+
+  .animate-blob {
+    animation: floatBlob 20s infinite alternate;
+  }
+
+  .animation-delay-2000 {
+    animation-delay: 2s;
+  }
+
+  .animation-delay-4000 {
+    animation-delay: 4s;
+  }
+}
+
+
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-family: "Poppins", sans-serif;
+  }
+}
