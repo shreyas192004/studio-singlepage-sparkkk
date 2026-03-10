@@ -6,6 +6,7 @@ import { ProductFilters } from "@/components/ProductFilters";
 import { Button } from "@/components/ui/button";
 import { useWishlist } from "@/contexts/WishlistContext";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 
 const Products = () => {
   const { toggleWishlist, isInWishlist } = useWishlist();

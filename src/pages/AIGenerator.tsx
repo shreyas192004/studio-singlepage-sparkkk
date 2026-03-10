@@ -634,10 +634,18 @@ export default function AIGenerator() {
         toast.success("Design generated and saved!");
       }
 
-      const newCount = generationCount + 1;
-      setGenerationCount(newCount);
-
+      // Re-fetch the actual count from DB to stay in sync
       if (user) {
+        const { data: statsData } = await supabase
+          .from("user_generation_stats")
+          .select("generation_count")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        const currentDbCount = statsData?.generation_count ?? generationCount;
+        const newCount = currentDbCount + 1;
+        setGenerationCount(newCount);
+
         await supabase
           .from("user_generation_stats")
           .upsert(
@@ -645,6 +653,8 @@ export default function AIGenerator() {
             { onConflict: "user_id" }
           );
       } else {
+        const newCount = generationCount + 1;
+        setGenerationCount(newCount);
         localStorage.setItem("generation_count", newCount.toString());
       }
 
