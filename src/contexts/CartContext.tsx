@@ -169,7 +169,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const qtyToAdd = item.quantity && item.quantity > 0 ? Math.floor(item.quantity) : 1;
 
     const existingIndex = cart.findIndex(
-      (i) => i.id === item.id && i.size === item.size && i.color === item.color && i.note === item.note
+      (i) =>
+        i.id === item.id &&
+        (i.size || "") === (item.size || "") &&
+        (i.color || "") === (item.color || "") &&
+        (i.note || "") === (item.note || "")
     );
 
     const previousCart = cart;
@@ -249,7 +253,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const removeFromCart = async (id: string, size?: string, color?: string) => {
     const previousCart = cart;
     const newCart = cart.filter(
-      (item) => !(item.id === id && item.size === size && item.color === color)
+      (item) => !(item.id === id && (item.size || "") === (size || "") && (item.color || "") === (color || ""))
     );
     setCart(newCart);
 
@@ -285,7 +289,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const previousCart = cart;
     const newCart = cart.map((item) =>
-      item.id === id && item.size === size && item.color === color
+      item.id === id && (item.size || "") === (size || "") && (item.color || "") === (color || "")
         ? { ...item, quantity }
         : item
     );
