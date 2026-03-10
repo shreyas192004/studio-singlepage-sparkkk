@@ -1028,6 +1028,15 @@ export default function AIGenerator() {
   //     </div>
   //   );
 
+  // Don't render the page while auth is still loading — prevents login modal flash
+  if (authLoading) {
+    return (
+      <div className="min-h-screen w-full bg-white flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full bg-white font-sans text-black selection:bg-accent-neon-lime selection:text-black relative overflow-x-hidden">
       {/* 🟢 Background Glow Accents */}
