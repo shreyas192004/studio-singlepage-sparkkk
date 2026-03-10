@@ -5,6 +5,7 @@ import * as z from "zod";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -146,6 +147,9 @@ export const AddressFormDialog = ({
           <DialogTitle>
             {address ? "Edit Address" : "Add New Address"}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            {address ? "Update your saved address details" : "Add a new shipping or billing address"}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

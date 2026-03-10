@@ -232,8 +232,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } as any);
           if (error) throw error;
         }
-      } catch (error) {
-        console.error("Error syncing cart to DB:", error);
+      } catch (error: any) {
+        console.error("Error syncing cart to DB:", {
+          message: error?.message,
+          code: error?.code,
+          details: error?.details,
+          hint: error?.hint,
+          payload: { user_id: user?.id, product_id: item.id, quantity: qtyToAdd, selected_size: item.size || null, selected_color: item.color || null },
+        });
         toast.error("Failed to sync cart with server. Reverting changes.");
         setCart(previousCart);
       }
