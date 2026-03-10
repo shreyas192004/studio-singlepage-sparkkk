@@ -23,14 +23,11 @@ export default defineConfig(({ mode }) => ({
     },
   },
   define: {
-    // Ensure Supabase env vars are always available (these are publishable keys)
-    'import.meta.env.VITE_SUPABASE_URL': JSON.stringify("https://ubqxlkvdbmkvtesmmwvj.supabase.co"),
-    'import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY': JSON.stringify("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVicXhsa3ZkYm1rdnRlc21td3ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2MzE4MjYsImV4cCI6MjA3ODIwNzgyNn0.Bti-Rt_KqBXJTMhU8vqhtrdb7qyqBBLn_hNmNcgOek0"),
-    // Map the dual-client env vars to the same Lovable Cloud project
-    'import.meta.env.VITE_MAIN_SUPABASE_URL': JSON.stringify("https://ubqxlkvdbmkvtesmmwvj.supabase.co"),
-    'import.meta.env.VITE_MAIN_SUPABASE_ANON_KEY': JSON.stringify("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVicXhsa3ZkYm1rdnRlc21td3ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2MzE4MjYsImV4cCI6MjA3ODIwNzgyNn0.Bti-Rt_KqBXJTMhU8vqhtrdb7qyqBBLn_hNmNcgOek0"),
-    'import.meta.env.VITE_AI_SUPABASE_URL': JSON.stringify("https://ubqxlkvdbmkvtesmmwvj.supabase.co"),
-    'import.meta.env.VITE_AI_SUPABASE_ANON_KEY': JSON.stringify("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVicXhsa3ZkYm1rdnRlc21td3ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2MzE4MjYsImV4cCI6MjA3ODIwNzgyNn0.Bti-Rt_KqBXJTMhU8vqhtrdb7qyqBBLn_hNmNcgOek0"),
+    // Publishable keys injected as global constants (Vite eats import.meta.env.VITE_* before define runs)
+    __MAIN_SUPABASE_URL__: JSON.stringify("https://ubqxlkvdbmkvtesmmwvj.supabase.co"),
+    __MAIN_SUPABASE_ANON_KEY__: JSON.stringify("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVicXhsa3ZkYm1rdnRlc21td3ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2MzE4MjYsImV4cCI6MjA3ODIwNzgyNn0.Bti-Rt_KqBXJTMhU8vqhtrdb7qyqBBLn_hNmNcgOek0"),
+    __AI_SUPABASE_URL__: JSON.stringify("https://ubqxlkvdbmkvtesmmwvj.supabase.co"),
+    __AI_SUPABASE_ANON_KEY__: JSON.stringify("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVicXhsa3ZkYm1rdnRlc21td3ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2MzE4MjYsImV4cCI6MjA3ODIwNzgyNn0.Bti-Rt_KqBXJTMhU8vqhtrdb7qyqBBLn_hNmNcgOek0"),
   },
 }));
 
